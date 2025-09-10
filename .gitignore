@@ -1,0 +1,55 @@
+# Ignore some file extensions
+*tif
+*.xml
+*.xlsx
+*.crdownload
+*.zip
+*.code-workspace
+*.qgz
+*.pyc
+*.pdf
+*rds
+*.xcf
+*.svg
+*.txt
+*.stan
+*.exe
+*.ico 
+
+# Shapefiles and related files
+*.csv
+*.png
+*.cpg
+*.dbf
+*.fix
+*.prj
+*.shp
+*.shx
+
+# Latex and related files
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.lof
+*.lot
+
+
+# Ignore specific documents
+desktop.ini
+chat.md
+
+
+# Ignore folders
+/data
+/docs
+/results
+/qgis
+/scripts
+__pycache__
+
+# Ignore temporaire files
