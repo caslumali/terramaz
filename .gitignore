@@ -42,6 +42,9 @@
 # Ignore specific documents
 desktop.ini
 chat.md
+CLAUDE.md
+explanation_Terramaz.md
+glad_gee_app.js
 
 
 # Ignore folders
@@ -49,7 +52,7 @@ chat.md
 /docs
 /results
 /qgis
-/scripts
+/scripts/quarto
 __pycache__
 
 # Ignore temporaire files

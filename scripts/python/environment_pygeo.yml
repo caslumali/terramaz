@@ -1,0 +1,61 @@
+name: pygeo  # Nom de l'environnement Conda
+
+channels:
+  - conda-forge  # Canal principal pour garantir des versions récentes et stables des bibliothèques
+
+dependencies:
+  # Version de Python
+  - python=3.11  # Version stable et compatible avec les bibliothèques géospatiales
+
+  # Bibliothèques pour la science des données et l'analyse statistique
+  - pandas         # Manipulation et analyse de données tabulaires
+  - numpy          # Calculs numériques et manipulation de matrices
+  - scipy          # Fonctions mathématiques avancées et algèbre linéaire
+  - scikit-learn   # Outils pour l'apprentissage automatique et l'analyse statistique
+  - matplotlib     # Visualisation et génération de graphiques
+  - seaborn        # Bibliothèque pour améliorer la visualisation de données
+  - plotly         # Outils pour créer des graphiques interactifs
+  - openpyxl       # Lecture et écriture de fichiers Excel au format .xlsx
+  
+  # Bibliothèques pour la manipulation de données spatiales
+  - geopandas      # Manipulation et analyse de données géospatiales au format vecteur
+  - shapely        # Création et manipulation d'objets géométriques
+  - pyproj         # Gestion des systèmes de coordonnées et des projections
+  - fiona          # Lecture et écriture de fichiers géospatiaux (Shapefile, GeoJSON, etc.)
+  - gdal           # Manipulation avancée de données raster et vecteur
+  - rasterio       # Lecture et manipulation de fichiers raster
+  - rioxarray      # Intégration des rasters avec xarray pour l'analyse de données multidimensionnelles
+  - rasterstats    # Calcul de statistiques spatiales sur des rasters
+  - museotoolbox   # Outils pour l'utilisation de données géospatiales en apprentissage automatique
+
+  # Outils pour l'analyse géostatistique
+  - pysal          # Ensemble de modules pour l'analyse spatiale et les statistiques géographiques
+
+  # Outils pour la visualisation et la cartographie
+  - folium         # Création de cartes interactives basées sur Leaflet
+  - ipyleaflet     # Version interactive de Leaflet pour les notebooks Jupyter
+  - contextily     # Ajout de fonds de carte aux graphiques de données géospatiales
+  - descartes      # Visualisation d'objets géométriques sur des cartes avec Matplotlib
+  - mapclassify    # Classification des données spatiales pour la cartographie thématique
+  - geoplot        # Outils avancés pour la création de cartes et de visualisations géospatiales
+
+  # Outils pour les applications interactives et la visualisation avancée
+  - dash           # Développement d'applications web interactives pour la visualisation des données
+  - hvplot         # Visualisation interactive basée sur Pandas et Xarray
+  - ipywidgets     # Ajout d'interactivité aux notebooks Jupyter avec des widgets
+  - voila          # Conversion de notebooks Jupyter en applications web interactives
+
+  # Outils pour l'environnement Jupyter et la gestion des notebooks
+  - jupyter        # Interface standard pour l'exécution de notebooks interactifs
+  - jupyterlab     # Version avancée de Jupyter Notebook avec interface améliorée
+  - notebook       # Interface classique de Jupyter Notebook
+  - jupyterlab_widgets  # Support des widgets interactifs dans JupyterLab
+  - jupyter-dash   # Intégration de Dash dans les notebooks Jupyter
+  - ipykernel      # Support pour l'exécution de différents noyaux dans Jupyter
+  - nb_conda_kernels  # Permet d'afficher les environnements Conda dans Jupyter Notebook
+  - tqdm           # Barre de progression pour les tâches longues
+
+  # Ajout de Quarto pour la génération de documents et de rapports
+  - quarto         # Outil pour la création de rapports, documents scientifiques et présentations
+
+
