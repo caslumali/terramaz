@@ -30,19 +30,19 @@ STAYERS_DEFAULT  <- FALSE   # keep or remove src==dst (permanence)
 MIN_FLOW_HA      <- 1      # drop tiny residual flows
 
 # Number of Sankey stages (3 or 4)
-N_STAGES <- 4L   # set to 4L to enable T0→T1→T2→T3
+N_STAGES <- 3L   # set to 4L to enable T0→T1→T2→T3
 
 # Aesthetics (tunable, used in plot helper)
-FLOW_ALPHA       <- 0.55
+FLOW_ALPHA       <- 0.40
 STRATUM_ALPHA    <- 0.75
 STRATUM_WIDTH    <- 0.30
 STRATUM_LABELS   <- FALSE  # add class labels on strata when TRUE
 STRATUM_MIN_HA   <- 2000   # only label strata >= this area (ha)
-MIN_PROP_PER_MID <- 0.003  # 0.3% of the mid's outgoing area (tune 0.002–0.01)
+MIN_PROP_PER_MID <- 0.02  # 0.3% of the mid's outgoing area (tune 0.002–0.01)
 
 # Territories to render (edit as needed)
-TERRITORIES <- c("madre_de_dios") # quick test
-# TERRITORIES <- c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
+# TERRITORIES <- c("madre_de_dios") # quick test
+TERRITORIES <- c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
 
 # Pretty labels for titles
 TERRITORY_LABELS <- c(
@@ -69,23 +69,23 @@ TMF_YEAR_MAX <- 2024
 # Example: Paragominas policy turning point ~2008
 if (N_STAGES == 3L) {
   BREAKS <- list(
-    cotriguacu    = c(T0 = 1991L, T1 = 2008L, T2 = 2024L),
+    cotriguacu    = c(T0 = 1991L, T1 = 2004L, T2 = 2024L),
     paragominas   = c(T0 = 1991L, T1 = 2008L, T2 = 2024L),
-    guaviare      = c(T0 = 1991L, T1 = 2014L, T2 = 2024L),
+    guaviare      = c(T0 = 1991L, T1 = 2016L, T2 = 2024L),
     madre_de_dios = c(T0 = 1991L, T1 = 2010L, T2 = 2024L)
   )
 } else {
   BREAKS <- list(
     cotriguacu    = c(T0 = 1991L, T1 = 2004L, T2 = 2012L, T3 = 2024L),
     paragominas   = c(T0 = 1991L, T1 = 2004L, T2 = 2008L, T3 = 2024L),
-    guaviare      = c(T0 = 1991L, T1 = 2006L, T2 = 2014L, T3 = 2024L),
+    guaviare      = c(T0 = 1991L, T1 = 2006L, T2 = 2016L, T3 = 2024L),
     madre_de_dios = c(T0 = 1991L, T1 = 2005L, T2 = 2010L, T3 = 2024L)
   )
 }
 
 ## 1.3 Language & labels ----
 # ------------------------------------------------------------------------- - - -
-LANGS <- c("pt")  # "pt" | "es" | "fr" | "en"
+LANGS <- c("fr")  # "pt" | "es" | "fr" | "en"
 
 # Localization (titles, axes, caption)
 LABELS <- list(
@@ -160,23 +160,23 @@ tmf_labels_for <- function(lang) TMF_CLASS_I18N[[lang]]
 
 ## 1.4 TMF palette & class order (from your table) ----
 # ------------------------------------------------------------------------- - - -
-# tmf_palette <- c(
-#   "Undisturbed forest" = "#005A00",   # 0,90,0
-#   "Degraded forest"    = "#649B23",   # 100,155,35
-#   "Deforested land"    = "#FF871F",   # 255,135,15
-#   "Forest regrowth"    = "#D2FA3C",   # 210,250,60
-#   "Water"              = "#008CBE",   # 0,140,190
-#   "Other land cover"   = "#575757ff"    # 255,255,255
-# )
-
 tmf_palette <- c(
-  "Undisturbed forest" = "#295029ff",   # 0,90,0
-  "Degraded forest"    = "#4b8804ff",   # 100,155,35
-  "Deforested land"    = "#b74848ff",   # 255,135,15
-  "Forest regrowth"    = "#e1c063ff",   # 210,250,60
-  "Water"              = "#1b789aff",   # 0,140,190
+  "Undisturbed forest" = "#005A00",   # 0,90,0
+  "Degraded forest"    = "#649B23",   # 100,155,35
+  "Deforested land"    = "#FF871F",   # 255,135,15
+  "Forest regrowth"    = "#D2FA3C",   # 210,250,60
+  "Water"              = "#008CBE",   # 0,140,190
   "Other land cover"   = "#575757ff"    # 255,255,255
 )
+
+# tmf_palette <- c(
+#   "Undisturbed forest" = "#295029ff",   # 0,90,0
+#   "Degraded forest"    = "#4b8804ff",   # 100,155,35
+#   "Deforested land"    = "#b74848ff",   # 255,135,15
+#   "Forest regrowth"    = "#caa640ff",   # 210,250,60
+#   "Water"              = "#1b789aff",   # 0,140,190
+#   "Other land cover"   = "#575757ff"    # 255,255,255
+# )
 
 tmf_order <- c(
   "Undisturbed forest",
@@ -438,49 +438,70 @@ build_alluvial_long_4 <- function(d01, d12, d23, tmf_order,
 ## 2.4 Plotting helper ----
 # ------------------------------------------------------------------------- - - -
 plot_sankey_tmf <- function(long_df, territory, lang = "fr") {
+  # --- Titles & caption -----------------------------------------------------
   title_txt    <- label("title_tmf", territory = TERRITORY_LABELS[[territory]])
-  # pega os labels já aplicados em make_sankey_tmf()
-  stage_labels <- levels(long_df$stage)
+  stage_labels <- levels(long_df$stage)                           # labels já setados fora
   subtitle_txt <- paste(stage_labels, collapse = " \u2192 ")
   cap_txt      <- LABELS$caption_tmf[[lang]]
 
+  # --- Y max for tight axis -------------------------------------------------
   totals <- long_df %>%
     dplyr::group_by(stage) %>%
     dplyr::summarise(total = sum(area_ha, na.rm = TRUE), .groups = "drop")
   ymax <- max(totals$total, na.rm = TRUE)
 
-  ggplot(long_df,
-        aes(x = stage, stratum = class,
-            alluvium = flow_id,
-            y = area_ha, fill = class, label = class)) +
-    geom_flow(stat = "alluvium", lwd = 0, alpha = FLOW_ALPHA, curve_type = "cubic") +
+  # --- Legend: only classes that actually appear ---------------------------
+  # English: show only present classes, preserving your preferred order
+  present_classes <- intersect(tmf_order, levels(droplevels(long_df$class)))
+  if (length(present_classes) == 0) present_classes <- tmf_order  # safe fallback
+  n_cols_legend <- 6L
+  n_rows_legend <- ceiling(length(present_classes) / n_cols_legend)
+
+  # --- Plot -----------------------------------------------------------------
+  ggplot(
+    long_df,
+    aes(x = stage, stratum = class, alluvium = flow_id,
+        y = area_ha, fill = class, label = class)
+  ) +
+    # English: match MB look — subtle white outline, cubic curve, earlier knot,
+    # fewer crossings with frontback lode guidance
+    geom_flow(
+      stat = "alluvium",
+      lwd = 0.2,
+      color = scales::alpha("white", 0.20),
+      alpha = FLOW_ALPHA,
+      curve_type = "cubic",
+      knot.pos = 0.30,
+      lode.guidance = "frontback"
+    ) +
     geom_stratum(
-        width = STRATUM_WIDTH,
-        color = "white", size = 0.3,   # subtle separator between blocks
-        alpha = STRATUM_ALPHA
-    ) +  # no borders
+      width = STRATUM_WIDTH,
+      color = "white", size = 0.3,
+      alpha = STRATUM_ALPHA
+    ) +
     scale_fill_manual(
-      values = tmf_palette,
-      breaks = tmf_order,
-      labels = tmf_labels_for(lang)[tmf_order],
-      drop   = FALSE,
+      values = tmf_palette[present_classes],
+      breaks = present_classes,
+      labels = tmf_labels_for(lang)[present_classes],
+      drop   = TRUE,
       guide  = guide_legend(
-        nrow = 1, byrow = TRUE,
-        keywidth = unit(1.5, "lines"),
+        nrow = n_rows_legend, byrow = TRUE,
+        keywidth  = unit(1.5, "lines"),
         keyheight = unit(0.5, "lines"),
         override.aes = list(alpha = STRATUM_ALPHA, colour = NA)
       )
     ) +
     scale_x_discrete(expand = expansion(mult = c(0.05, 0.05))) +
-    axis_y_ha_tight (ymax) +
+    axis_y_ha_tight(ymax) +
     labs(
       title    = title_txt,
-      subtitle = subtitle_txt,  # <-- dates now live here
+      subtitle = subtitle_txt,
       y        = LABELS$y_area_ha[[lang]],
       caption  = cap_txt
     ) +
-    theme_sankey()    
+    theme_sankey()
 }
+
 
 ## 2.5 Main worker (single territory) ----
 # ------------------------------------------------------------------------- - - -
@@ -603,10 +624,9 @@ make_sankey_tmf  <- function(
   # Export files
   out_base <- file.path(out_dir, territory, glue("{territory}_{lang}"))
   if (!dir.exists(out_base)) dir.create(out_base, recursive = TRUE)
-  tag <- if (stayers) "withStayers" else "noStayers"
-  file_stub <- glue("05a_{territory}_sankey_tmf_1991_2024",
-                    "_", tag, "_", lang)
-  file_stub <- gsub("__", "_", file_stub)
+  # tag <- if (stayers) "withStayers" else "noStayers"
+  stage_tag <- if (n_stages == 4L) "4stages" else "3stages"
+  file_stub <- glue("05a_{territory}_sankey_tmf_{stage_tag}_{lang}")
 
   if (isTRUE(WRITE_PLOT)) {
     png_path <- file.path(out_base, glue("{file_stub}.png"))

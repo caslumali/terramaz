@@ -1,6 +1,6 @@
 ##%###########################################################################%##
 #                                                                               #
-#                            Burned Forest Time Series                       ----
+#                         Deforestation Time Series                          ----
 #                                                                               #
 ##%###########################################################################%##
 
@@ -20,14 +20,11 @@ suppressPackageStartupMessages({
 
 ## 1.1 Global parameters ----
 # ------------------------------------------------------------------------- - - -
-WRITE_PLOT <- TRUE
-WRITE_SVG  <- FALSE
+WRITE_PLOT    <- TRUE
+WRITE_SVG     <- FALSE
+# TERRITORIES <- c("guaviare")  # quick test
+TERRITORIES   <- c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
 
-# Choose the territories you want to render
-# TERRITORIES <- c("cotriguacu")  # quick test
-TERRITORIES <- c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
-
-# Pretty labels for plot titles
 TERRITORY_LABELS <- c(
   cotriguacu    = "Cotriguacu",
   paragominas   = "Paragominas",
@@ -35,31 +32,24 @@ TERRITORY_LABELS <- c(
   madre_de_dios = "Madre de Dios"
 )
 
-# Fixed full-page export size (A4-width figures in your layout)
-FILENAME_STUB <- "burned_ts"
-FIG_WIDTH_MM  <- 431.8   # 17 in — full page width
-FIG_HEIGHT_MM <- 152.4   # 6 in  — consistent with other figures
-UNITS         <- "mm"
-DPI           <- 300
-
-# Time window for burned series
-BURN_YEAR_MIN <- 2001
-BURN_YEAR_MAX <- 2024
-
-# Territories considered "Brazil" (use MapBiomas+GLAD fire in caption)
-BRAZIL_TERRITORIES <- c("cotriguacu", "paragominas")
+# Output file parameters (FIXED full-page size for A4 PDFs)
+FILENAME_STUB    <- "deforestation_ts"
+FIG_WIDTH_MM     <- 431.8   # 17 in — full page width
+FIG_HEIGHT_MM    <- 152.4   # 6 in  — consistent with fire plots
+UNITS            <- "mm"
+DPI              <- 300
 
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
-LANGS <- c("pt")  # "pt" | "es" | "fr" | "en"
+LANGS <- c("fr")   # "pt" | "es" | "fr" | "en"
 
 LABELS <- list(
   # Titles
-  title_burned_in = c(
-    fr = "Évolution annuelle de la forêt brûlée à {territory}",
-    es = "Evolución anual del bosque quemado en {territory}",
-    pt = "Evolução anual da floresta queimada em {territory}",
-    en = "Annual evolution of burned forest in {territory}"
+  title_deforestation_in = c(
+    fr = "Évolution annuelle de la déforestation à {territory}",
+    es = "Evolución anual de la deforestación en {territory}",
+    pt = "Evolução anual do desmatamento em {territory}",
+    en = "Annual evolution of deforestation in {territory}"
   ),
   # Axes
   x_year = c(fr = "Année", pt = "Ano", es = "Año", en = "Year"),
@@ -68,36 +58,39 @@ LABELS <- list(
     es = "Área (ha)",
     pt = "Área (ha)",
     en = "Area (ha)"
-  ),
-  # Legend (single series label)
-  legend_burned = c(
-    fr = "Surface brûlée",
-    es = "Área quemada",
-    pt = "Área queimada",
-    en = "Burned area"
   )
 )
 
-# Helper to resolve translated strings with glue()
+# Dynamic label function
 label <- function(key, ...) {
   template <- LABELS[[key]][[LANG]]
   glue::glue(template, .envir = rlang::env(...))
 }
 
-## 1.3 Palette (single source) ----
+## 1.3 Palettes for sources (lines) ----
 # ------------------------------------------------------------------------- - - -
-# Use a "fire red" and keep the internal key stable ("burned") — the visible label is localized.
-source_line_colors <- c(burned = "#d62728")
-source_line_types  <- c(burned = "solid")
+source_line_colors <- c(
+  `JRC-TMF` = "#1f77b4",
+  MapBiomas = "#d58d2fff",
+  INPE      = "#d62728",
+  IDEAM     = "#9467bd"
+)
 
-## 1.4 Theme & scales (consistent with other series) ----
+source_line_types <- c(
+  `JRC-TMF` = "solid",
+  MapBiomas = "solid",
+  INPE      = "solid",
+  IDEAM     = "solid"
+)
+
+## 1.4 Theme & scales (self-contained) ----
 # ------------------------------------------------------------------------- - - -
 theme_time_series <- function() {
   theme_minimal(base_size = 13) +
     theme(
       plot.title.position = "plot",
       plot.title          = element_text(hjust = 0.5, face = "bold", size = 16, margin = margin(b = 10)),
-      axis.text.x         = element_text(size = 11, angle = 45, hjust = 1, vjust = 1, margin = margin(t = 6)),
+      axis.text.x         = element_text(size = 11, angle = 45, hjust = 1, vjust = 1),
       axis.text.y         = element_text(size = 11),
       axis.title.x        = element_text(size = 12, margin = margin(t = 12)),
       axis.title.y        = element_text(size = 12, margin = margin(r = 12)),
@@ -122,35 +115,6 @@ axis_x_years_all <- function(year_min, year_max) {
   )
 }
 
-# Adaptive Y scale: friendly ticks from small to large values (in 10^3 ha labels)
-# axis_y_thousands_auto <- function(y_max_raw) {
-#   ymax <- max(0, as.numeric(y_max_raw))
-#   if (!is.finite(ymax) || ymax <= 0) ymax <- 1000
-
-#   if (ymax <= 2500) {
-#     step_candidates <- c(100, 200, 250, 500, 1000, 2000)
-#     label_acc <- 0.1
-#   } else if (ymax <= 7000) {
-#     step_candidates <- c(500, 1000, 2000, 2500, 5000)
-#     label_acc <- 0.5
-#   } else {
-#     step_candidates <- c(1000, 2000, 5000, 10000, 20000, 50000)
-#     label_acc <- 1
-#   }
-
-#   target_n <- 7
-#   n_breaks <- ceiling(ymax / step_candidates) + 1
-#   step <- step_candidates[ which.min(abs(n_breaks - target_n)) ]
-#   ymax <- ceiling(ymax / step) * step
-
-#   ggplot2::scale_y_continuous(
-#     breaks = seq(0, ymax, by = step),
-#     labels = function(v) scales::number(v / 1000, accuracy = label_acc, big.mark = " "),
-#     limits = c(0, ymax),
-#     expand = expansion(mult = c(0.03, 0.03))
-#   )
-# }
-
 # Pretty Y axis in full hectares (no scientific, nice thousands separators)
 axis_y_ha_auto <- function(y_max_raw) {
   ymax <- max(0, as.numeric(y_max_raw))
@@ -170,68 +134,37 @@ axis_y_ha_auto <- function(y_max_raw) {
   )
 }
 
+
 ##%###########################################################################%##
 #                                                                               #
 #                         2) Utility Functions                               ----
 #                                                                               #
 ##%###########################################################################%##
 
-## 2.1 Map CSV column names to the burned series ----
+## 2.1 Map CSV column names to canonical sources ----
 # ------------------------------------------------------------------------- - - -
-# Priority: exact 'combined_fire_ha'. Otherwise, accept any '*fire|burn*_ha' or '*_area_ha'
-map_col_to_burned <- function(colname) {
+map_col_to_source <- function(colname) {
   z <- tolower(colname)
-  if (z == "combined_fire_ha") return("burned")
-  if (str_detect(z, "(fire|burn)") && str_detect(z, "(_area_ha|_ha)$")) return("burned")
+  if (str_detect(z, "tmf")       && str_detect(z, "area_ha")) return("JRC-TMF")
+  if (str_detect(z, "mapbiomas") && str_detect(z, "area_ha")) return("MapBiomas")
+  if (str_detect(z, "prodes")    && str_detect(z, "area_ha")) return("INPE")
+  if (str_detect(z, "ideam")     && str_detect(z, "area_ha")) return("IDEAM")
   NA_character_
 }
 
-## 2.2 Caption (conditional on territory) ----
+## 2.2 Expected sources per territory ----
 # ------------------------------------------------------------------------- - - -
-# Brazil territories -> "MapBiomas + GLAD fire: 2001–2024"
-# Others -> "MODIS + GLAD fire: 2001–2024"
-caption_burned <- function(territory, lang = "fr") {
-  is_br <- tolower(territory) %in% BRAZIL_TERRITORIES
-  
-  connector <- switch(lang,
-    "fr" = "combiné avec",
-    "pt" = "combinado com",
-    "es" = "combinado con",
-    "en" = "combined with",
-    "combined with"
+expected_sources <- function(territory) {
+  switch(tolower(territory),
+         "cotriguacu"    = c("JRC-TMF","MapBiomas","INPE"),
+         "paragominas"   = c("JRC-TMF","MapBiomas","INPE"),
+         "guaviare"      = c("JRC-TMF","MapBiomas","IDEAM"),
+         "madre_de_dios" = c("JRC-TMF","MapBiomas"),
+         c("JRC-TMF","MapBiomas")
   )
-  
-  if (is_br) {
-    core <- switch(lang,
-      "fr" = glue("MapBiomas {connector} GLAD fire : 2001–2024"),
-      "pt" = glue("MapBiomas {connector} GLAD fire: 2001–2024"),
-      "es" = glue("MapBiomas {connector} GLAD fire: 2001–2024"),
-      "en" = glue("MapBiomas {connector} GLAD fire: 2001–2024"),
-      glue("MapBiomas {connector} GLAD fire: 2001–2024")
-    )
-  } else {
-    core <- switch(lang,
-      "fr" = glue("MODIS {connector} GLAD fire : 2001–2024"),
-      "pt" = glue("MODIS {connector} GLAD fire: 2001–2024"),
-      "es" = glue("MODIS {connector} GLAD fire: 2001–2024"),
-      "en" = glue("MODIS {connector} GLAD fire: 2001–2024"),
-      glue("MODIS {connector} GLAD fire: 2001–2024")
-    )
-  }
-  
-  prefix <- switch(lang,
-    "fr" = "Sources — ",
-    "pt" = "Fontes — ",
-    "es" = "Fuentes — ",
-    "en" = "Sources — ",
-    "Sources — "
-  )
-  
-  paste0(prefix, core)
 }
 
-
-## 2.3 Trim leading zeros (avoid flat lines glued at zero) ----
+## 2.3 Trim leading zeros per source (avoid flat lines glued at zero) ----
 # ------------------------------------------------------------------------- - - -
 trim_leading_zeros <- function(y) {
   ix <- which(!is.na(y) & y > 0)
@@ -242,6 +175,28 @@ trim_leading_zeros <- function(y) {
   out
 }
 
+## 2.4 Coverage strings for each source ----
+# ------------------------------------------------------------------------- - - -
+SOURCE_COVERAGE <- c(
+  `JRC-TMF`  = "JRC-TMF: 1990–2024",
+  MapBiomas  = "MapBiomas: 1990–2023",
+  INPE       = "INPE: 2008–2024",
+  IDEAM      = "IDEAM: 2012–2023"
+)
+
+## 2.5 Caption dynamic for territories ----
+# ------------------------------------------------------------------------- - - -
+caption_for <- function(territory, present_sources, lang = "en") {
+  allowed <- expected_sources(territory)
+  used    <- intersect(present_sources, allowed)
+  used    <- used[!is.na(used) & used %in% names(SOURCE_COVERAGE)]
+  if (length(used) == 0) return("")
+  cov_str <- paste(unname(SOURCE_COVERAGE[used]), collapse = " | ")
+  prefix <- switch(lang, "fr"="Sources — ", "pt"="Fontes — ", "es"="Fuentes — ",
+                         "en"="Sources — ", "Sources — ")
+  paste0(prefix, cov_str)
+}
+
 ##%###########################################################################%##
 #                                                                               #
 #                         3) Main Processing Loop                            ----
@@ -250,7 +205,6 @@ trim_leading_zeros <- function(y) {
 
 for (LANG in LANGS) {
   message(glue("🌐 Language: {LANG}"))
-
   for (TERRITORY in TERRITORIES) {
 
     cat("\n", paste(rep("=", 64), collapse=""), "\n", sep = "")
@@ -258,16 +212,14 @@ for (LANG in LANGS) {
     cat("\n", paste(rep("=", 64), collapse=""), "\n", sep = "")
 
     INPUT_DIR  <- file.path("results/metrics", TERRITORY)
-    # Output in a territory/lang subfolder to help partners find assets easily
-    OUTPUT_DIR <- file.path("results/plots", TERRITORY, glue("{TERRITORY}_{LANG}"))
+    OUTPUT_DIR <- file.path("results/plots",   TERRITORY, glue(TERRITORY, '_', LANG))
     if (!dir.exists(OUTPUT_DIR)) dir.create(OUTPUT_DIR, recursive = TRUE)
 
-    ### 3.1 Load burned CSV ----
+    ### 3.1 Load main deforestation CSV ----
     # ----------------------------------------------------------------------- - - -
-    # Expect pattern like: "<territory>_burned_forest_2001_2024.csv"
     main_csv <- list.files(
       INPUT_DIR,
-      pattern = glue("^{TERRITORY}_burned_.*\\.csv$"),
+      pattern = glue("^{TERRITORY}_deforestation_.*\\.csv$"),
       full.names = TRUE, ignore.case = TRUE
     )
     if (length(main_csv) == 0) {
@@ -277,7 +229,7 @@ for (LANG in LANGS) {
     message(glue("📊 Loading: {basename(main_csv[1])}"))
     df <- suppressMessages(readr::read_csv(main_csv[1], show_col_types = FALSE))
 
-    # Robust year column detection
+    # robust year column detection
     nms_lc <- tolower(names(df))
     year_candidates <- c("year","ano","yr","year_int")
     year_idx <- match(year_candidates, nms_lc, nomatch = 0)
@@ -288,65 +240,78 @@ for (LANG in LANGS) {
     year_col <- names(df)[year_idx[year_idx > 0][1]]
     message(glue("✓ Using year column: '{year_col}'"))
 
-    # Candidate *_ha columns for burned area (prio: combined_fire_ha)
-    ha_cols_all <- names(df)[str_detect(tolower(names(df)), "(_area_ha|_ha)$")]
-    if (length(ha_cols_all) == 0) {
-      message("⚠ No '*_ha' columns found — skipping.")
+    # *_area_ha columns
+    area_cols <- names(df)[str_detect(tolower(names(df)), "area_ha$")]
+    if (length(area_cols) == 0) {
+      message("⚠ No '*_area_ha' columns found — skipping.")
       next
     }
+    message(glue("✓ Area columns: {paste(area_cols, collapse=', ')}"))
 
-    # Map columns to "burned" and keep only those
-    mapped <- vapply(ha_cols_all, map_col_to_burned, character(1))
-    ha_cols <- ha_cols_all[!is.na(mapped)]
-    if (length(ha_cols) == 0) {
-      message(glue("⚠ No burned area columns matched (looked for 'combined_fire_ha' or '*fire|burn*_ha'). Found: {paste(ha_cols_all, collapse=', ')}"))
-      next
-    }
-
-    # If multiple matched, prefer the exact 'combined_fire_ha'
-    if ("combined_fire_ha" %in% tolower(ha_cols)) {
-      ix <- which(tolower(ha_cols) == "combined_fire_ha")[1]
-      ha_cols <- ha_cols[ix]
-    } else {
-      # otherwise take the first mapped column (but log it)
-      message(glue("ℹ Using burned column: {ha_cols[1]}"))
-      ha_cols <- ha_cols[1]
-    }
-    message(glue("✓ Burned columns: {paste(ha_cols, collapse=', ')}"))
-
-    # Make long and tidy
     long_main <- df %>%
-      select(all_of(c(year_col, ha_cols))) %>%
-      pivot_longer(cols = all_of(ha_cols), names_to = "var", values_to = "area_ha") %>%
+      select(all_of(c(year_col, area_cols))) %>%
+      pivot_longer(cols = all_of(area_cols), names_to = "var", values_to = "area_ha") %>%
       mutate(
-        source_used = "burned",                       # stable key
+        source_used = vapply(var, map_col_to_source, character(1)),
         year        = as.integer(.data[[year_col]]),
         area_ha     = suppressWarnings(as.numeric(area_ha))
       ) %>%
-      filter(!is.na(year), !is.na(area_ha)) %>%
+      filter(!is.na(source_used), !is.na(year), !is.na(area_ha)) %>%
       select(year, source_used, area_ha) %>%
       arrange(year, source_used)
 
-    # Keep only the window 2001–2024
-    long_main <- long_main %>%
-      filter(year >= BURN_YEAR_MIN, year <= BURN_YEAR_MAX)
-
-    if (nrow(long_main) == 0) {
-      message(glue("⚠ No data rows within {BURN_YEAR_MIN}–{BURN_YEAR_MAX} — skipping."))
-      next
+    ### 3.2 IDEAM integration (Guaviare only) ----
+    # ----------------------------------------------------------------------- - - -
+    if (tolower(TERRITORY) == "guaviare") {
+      ideam_csv <- list.files(
+        INPUT_DIR,
+        pattern = glue("^{TERRITORY}.*deforestation_ideam.*\\.csv$"),
+        full.names = TRUE, ignore.case = TRUE
+      )
+      if (length(ideam_csv) > 0) {
+        message(glue("🔗 Integrating IDEAM: {basename(ideam_csv[1])}"))
+        ideam <- suppressMessages(readr::read_csv(ideam_csv[1], show_col_types = FALSE))
+        if (all(c("year", "def_year_ha") %in% names(ideam))) {
+          ideam_long <- ideam %>%
+            transmute(
+              year        = as.integer(.data[["year"]]),
+              source_used = "IDEAM",
+              area_ha     = as.numeric(.data[["def_year_ha"]])
+            ) %>%
+            filter(!is.na(year), !is.na(area_ha), year >= 2012)
+          long_main <- bind_rows(long_main, ideam_long)
+          message("✓ IDEAM merged.")
+        } else {
+          message("⚠ IDEAM: required columns not found — skipping merge.")
+        }
+      } else {
+        message("ℹ IDEAM CSV not found — proceeding without it.")
+      }
     }
 
-    ### 3.2 Filter, cast, and clean ----
+    ### 3.3 Filter, type-cast, and validate ----
     # ----------------------------------------------------------------------- - - -
+    # Coverage years per source 
+    YEAR_MIN <- c(`JRC-TMF` = 1990L, MapBiomas = 1990L, INPE = 2008L, IDEAM = 2012L)
+    YEAR_MAX <- c(`JRC-TMF` = 2024L, MapBiomas = 2023L, INPE = 2024L, IDEAM = 2023L)
+    
+    expected <- expected_sources(TERRITORY)
+
     df_long <- long_main %>%
+      filter(source_used %in% expected) %>%
       mutate(
-        source_used = factor(source_used, levels = "burned"),
+        source_used = factor(source_used, levels = expected),
         year        = as.integer(year),
         area_ha     = pmax(suppressWarnings(as.numeric(area_ha)), 0)
       ) %>%
+      # >>> enforce source coverage to avoid spurious 2024 for MapBiomas <<<
+      filter(
+        year >= YEAR_MIN[as.character(source_used)],
+        year <= YEAR_MAX[as.character(source_used)]
+      ) %>%
       arrange(year, source_used)
 
-    # Optional: trim leading zeros to avoid a long flat line glued at 0 at the start
+    # Trim leading zeros to avoid a flat line at zero
     df_long <- df_long %>%
       group_by(source_used) %>%
       arrange(year, .by_group = TRUE) %>%
@@ -354,20 +319,20 @@ for (LANG in LANGS) {
       ungroup()
 
     if (nrow(df_long) == 0) {
-      message("⚠ No rows after cleaning — skipping.")
+      message(glue("⚠ No rows after filtering expected sources: {paste(expected, collapse=', ')}"))
       next
     }
 
-    present_sources <- levels(droplevels(df_long$source_used))  # "burned"
+    # Build palette after final filtering
+    present_sources <- levels(droplevels(df_long$source_used))
     cols <- source_line_colors[present_sources]
     ltys <- source_line_types[present_sources]
     year_min <- min(df_long$year, na.rm = TRUE)
     year_max <- max(df_long$year, na.rm = TRUE)
+    message(glue("✓ Sources present: {paste(present_sources, collapse=', ')}"))
+    message(glue("✓ Year range: {year_min}–{year_max} (n={nrow(df_long)})"))
 
-    message(glue("✓ Source present: {paste(present_sources, collapse=', ')}"))
-    message(glue("✓ Year range (clipped): {year_min}–{year_max} (n={nrow(df_long)})"))
-
-    # Final subset for plotting
+    # Defensive subset for plotting
     df_plot <- df_long %>% filter(!is.na(area_ha)) %>% droplevels()
     if (nrow(df_plot) == 0) {
       message(glue("⚠ No valid data after processing for {TERRITORY}"))
@@ -375,54 +340,43 @@ for (LANG in LANGS) {
     }
 
     territory_title <- TERRITORY_LABELS[[TERRITORY]]
-    leg_label <- label("legend_burned")  # localized legend string
+    present_sources <- levels(df_plot$source_used)
 
-    ### 3.3 Plot ----
+    ### 3.4 Plot ----
     # ----------------------------------------------------------------------- - - -
     p <- ggplot(df_plot, aes(x = year, y = area_ha, color = source_used, linetype = source_used)) +
       geom_line(linewidth = 1.2, lineend = "round", na.rm = TRUE) +
       geom_point(size = 4, stroke = 0, na.rm = TRUE) +
-      scale_color_manual(
-        values = cols,
-        breaks = "burned",
-        labels = c(burned = leg_label),
-        guide  = guide_legend(title = NULL)
-      ) +
-      scale_linetype_manual(
-        values = ltys,
-        breaks = "burned",
-        labels = c(burned = leg_label),
-        guide  = "none"
-      ) +
-      # Force full burned window on the axis for consistency across territories
-      axis_x_years_all(BURN_YEAR_MIN, BURN_YEAR_MAX) +
+      scale_color_manual(values = cols, breaks = present_sources, guide = guide_legend(title = NULL)) +
+      scale_linetype_manual(values = ltys, breaks = present_sources, guide = "none") +
+      axis_x_years_all(year_min, year_max) +
       # axis_y_thousands_auto(max(df_plot$area_ha, na.rm = TRUE)) +
       axis_y_ha_auto(max(df_plot$area_ha, na.rm = TRUE)) +
       labs(
-        title   = label("title_burned_in", territory = territory_title),
+        title   = label("title_deforestation_in", territory = territory_title),
         x       = label("x_year"),
         y       = label("y_area_ha"),
-        caption = caption_burned(TERRITORY, LANG)
+        caption = caption_for(TERRITORY, present_sources, LANG)
       ) +
       theme_time_series()
 
     print(p)
     message(glue("✓ Plot generated for {TERRITORY}"))
 
-    ### 3.4 Export (fixed full-page size) ----
+    ### 3.5 Export (fixed full-page size) ----
     # ----------------------------------------------------------------------- - - -
     if (WRITE_PLOT) {
-      file_stub <- glue("04_{TERRITORY}_burned_{LANG}")  # keep numeric prefix distinct
+      file_stub <- glue("01_{TERRITORY}_deforestation_{LANG}")
+      png_path  <- file.path(OUTPUT_DIR, glue("{file_stub}.png"))
 
-      # PNG
-      png_path <- file.path(OUTPUT_DIR, glue("{file_stub}.png"))
+      # PNG 
       ggsave(
         filename = png_path, plot = p,
         width = FIG_WIDTH_MM, height = FIG_HEIGHT_MM, units = UNITS,
         dpi = DPI, bg = "white"
       )
 
-      # SVG (optional)
+      # SVG
       if (isTRUE(WRITE_SVG)) {
         svg_path <- file.path(OUTPUT_DIR, glue("{file_stub}.svg"))
         ggsave(
@@ -442,7 +396,6 @@ for (LANG in LANGS) {
     } else {
       message("ℹ Preview mode — set WRITE_PLOT <- TRUE to export.")
     }
-
     cat("\n", paste(rep("-", 64), collapse=""), "\n", sep = "")
   }
 }

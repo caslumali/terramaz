@@ -32,23 +32,22 @@ AGGREGATE_CLASSES  <- TRUE
 SMALL_TO_OTHER     <- FALSE         # keep FALSE for now (plot already clean with 8 classes)
 MIN_CLASS_TOTAL_HA <- 5000
 DROP_OTHER_CLASS   <- FALSE
-# Never merge these into "Other anthropic" even if SMALL_TO_OTHER is TRUE:
-SMALL_EXCEPTIONS   <- c("Urban", "Mining")
+
 
 # Visualization flags for Sankey
 STAYERS_DEFAULT  <- FALSE   # keep or remove src==dst flows
-MIN_FLOW_HA      <- 1       # drop tiny residual flows
+MIN_FLOW_HA      <- 500       # drop tiny residual flows
 
 # Number of Sankey stages (3 or 4) — same logic as your TMF script
-N_STAGES <- 4L               # set to 3L if you want T0→T1→T2
+N_STAGES <- 3L               # set to 3L if you want T0→T1→T2
 
 # Aesthetics
-FLOW_ALPHA       <- 0.55     # flow ribbons transparency
+FLOW_ALPHA       <- 0.50     # flow ribbons transparency
 STRATUM_ALPHA    <- 0.75     # blocks transparency
 STRATUM_WIDTH    <- 0.30
 STRATUM_LABELS   <- FALSE    # add class labels on strata when TRUE
 STRATUM_MIN_HA   <- 2000
-MIN_PROP_PER_MID <- 0.1    # outgoing prop cut in middle stage(s)
+MIN_PROP_PER_MID <- 0.10    # outgoing prop cut in middle stage(s)
 
 # Territories to render
 # TERRITORIES <- c("madre_de_dios") # quick test
@@ -78,23 +77,23 @@ MB_YEAR_MAX <- 2023L
 # You can tune these per territory. Defaults below mirror your TMF approach.
 if (N_STAGES == 3L) {
   BREAKS <- list(
-    cotriguacu    = c(T0 = 1986L, T1 = 2008L, T2 = 2023L),
+    cotriguacu    = c(T0 = 1986L, T1 = 2004L, T2 = 2023L),
     paragominas   = c(T0 = 1986L, T1 = 2008L, T2 = 2023L),
-    guaviare      = c(T0 = 1986L, T1 = 2014L, T2 = 2023L),
+    guaviare      = c(T0 = 1986L, T1 = 2016L, T2 = 2023L),
     madre_de_dios = c(T0 = 1986L, T1 = 2010L, T2 = 2023L)
   )
 } else {
   BREAKS <- list(
     cotriguacu    = c(T0 = 1986L, T1 = 2004L, T2 = 2012L, T3 = 2023L),
     paragominas   = c(T0 = 1986L, T1 = 2004L, T2 = 2008L, T3 = 2023L),
-    guaviare      = c(T0 = 1986L, T1 = 2006L, T2 = 2014L, T3 = 2023L),
+    guaviare      = c(T0 = 1986L, T1 = 2006L, T2 = 2016L, T3 = 2023L),
     madre_de_dios = c(T0 = 1986L, T1 = 2005L, T2 = 2010L, T3 = 2023L)
   )
 }
 
 ## 1.3 Language & labels (titles, axes, caption) ----
 # ------------------------------------------------------------------------- - - -
-LANGS <- c("pt")  # "pt" | "es" | "fr" | "en"
+LANGS <- c("fr")  # "pt" | "es" | "fr" | "en"
 
 LABELS <- list(
   # Title (no dates)
@@ -112,10 +111,10 @@ LABELS <- list(
   y_area_ha = c(fr = "Surface (ha)", es = "Área (ha)", pt = "Área (ha)", en = "Area (ha)"),
   # Caption (source line)
   caption_mb = c(
-    fr = "Sources — MapBiomas Amazonie, Collection 6 : 1986–2023",
-    es = "Fuentes — MapBiomas Amazonía, Colección 6: 1986–2023",
-    pt = "Fontes — MapBiomas Amazônia, Coleção 6: 1986–2023",
-    en = "Sources — MapBiomas Amazonia, Collection 6: 1986–2023"
+    fr = "Sources — MapBiomas : 1985–2023",
+    es = "Fuentes — MapBiomas: 1985–2023",
+    pt = "Fontes — MapBiomas: 1985–2023",
+    en = "Sources — MapBiomas: 1985–2023"
   )
 )
 
@@ -190,13 +189,13 @@ mb_labels_for <- function(lang) MB_CLASS_I18N[[lang]]
 # Colors adapted from MapBiomas (Collection 6) for the aggregated groups you showed.
 mb_palette <- c(
   "Forest"                        = "#1F8D49",  # green
-  "Non-forest natural formation"  = "#D6BC74",  # beige
-  "Water"                         = "#2532E4",  # blue
+  "Non-forest natural formation"  = "#df9b60ff",  # beige
+  "Water"                         = "#1b789aff",  # blue
   "Pasture"                       = "#EDDE8E",  # pale yellow
   "Agriculture"                   = "#E974ED",  # magenta (Agriculture + Silviculture + Oil palm)
-  "Urban"                         = "#D4271E",  # red
+  "Urban"                         = "#2dc6b7ff",  # red
   "Mining"                        = "#9C0027",  # dark red
-  "Other anthropic"               = "#DB4D4F"   # brick red
+  "Other anthropic"               = "#686868ff"   # brick red
 )
 
 # Natural first → water → productive → urban/mining → residual
@@ -256,8 +255,8 @@ theme_sankey <- function() {
       legend.box        = "horizontal",
       legend.background = element_blank(),
       legend.key        = element_rect(fill = NA, colour = NA),  # no stroke
-      legend.key.height = unit(0.5, "lines"),
-      legend.key.width  = unit(1.2, "lines"),
+      legend.key.height = unit(0.6, "lines"),
+      legend.key.width  = unit(3, "lines"),
       legend.margin     = margin(b = 6),
       plot.margin       = margin(12, 12, 12, 12),
       plot.caption      = element_text(hjust = 1, size = 10, color = "gray30", margin = margin(t = 12))
@@ -616,7 +615,7 @@ make_sankey_mb <- function(
       )
   }
 
-  if (nrow(long) == 0) abort("No flows left after filtering/aggregation.")
+  if (nrow(long) == 0L) abort("No flows remain after filtering.")
 
   message(glue("✅ Generated {nrow(long)} alluvial records"))
 
@@ -628,9 +627,9 @@ make_sankey_mb <- function(
   # Export
   out_base <- file.path(out_dir, territory, glue("{territory}_{lang}"))
   if (!dir.exists(out_base)) dir.create(out_base, recursive = TRUE)
-  tag <- if (stayers) "withStayers" else "noStayers"
-  stage_tag <- if (n_stages == 4L) "4stage" else "3stage"
-  file_stub <- glue("05b_{territory}_sankey_mb_{stage_tag}_{tag}_{lang}")
+  # tag <- if (stayers) "withStayers" else "noStayers"
+  stage_tag <- if (n_stages == 4L) "4stages" else "3stages"
+  file_stub <- glue("05b_{territory}_sankey_mb_{stage_tag}_{lang}")
 
   if (isTRUE(WRITE_PLOT)) {
     png_path <- file.path(out_base, glue("{file_stub}.png"))

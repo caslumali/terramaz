@@ -1,6 +1,6 @@
 ##%###########################################################################%##
 #                                                                               #
-#                         Deforestation Time Series                          ----
+#                         Regrowth Time Series (TMF-only)                    ----
 #                                                                               #
 ##%###########################################################################%##
 
@@ -20,10 +20,12 @@ suppressPackageStartupMessages({
 
 ## 1.1 Global parameters ----
 # ------------------------------------------------------------------------- - - -
-WRITE_PLOT    <- TRUE
-WRITE_SVG     <- FALSE
-# TERRITORIES <- c("guaviare")  # quick test
-TERRITORIES   <- c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
+WRITE_PLOT <- TRUE
+WRITE_SVG  <- FALSE
+
+# Territories to process
+# TERRITORIES <- c("cotriguacu")  # quick test
+TERRITORIES <- c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
 
 TERRITORY_LABELS <- c(
   cotriguacu    = "Cotriguacu",
@@ -32,24 +34,28 @@ TERRITORY_LABELS <- c(
   madre_de_dios = "Madre de Dios"
 )
 
-# Output file parameters (FIXED full-page size for A4 PDFs)
-FILENAME_STUB    <- "deforestation_ts"
-FIG_WIDTH_MM     <- 431.8   # 17 in — full page width
-FIG_HEIGHT_MM    <- 152.4   # 6 in  — consistent with fire plots
-UNITS            <- "mm"
-DPI              <- 300
+# Fixed full-page figure size (A4 width) to match other figures
+FILENAME_STUB <- "regrowth_ts"
+FIG_WIDTH_MM  <- 431.8   # 17 in — full page width
+FIG_HEIGHT_MM <- 152.4   # 6 in  — consistent height
+UNITS         <- "mm"
+DPI           <- 300
+
+# Year trimming for plotting (e.g., drop 1990 and the last 2 uncertain years)
+DROP_FIRST_YEARS <- 1   # drops 1990
+DROP_LAST_YEARS  <- 2   # drops 2023–2024
 
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
-LANGS <- c("fr")   # "pt" | "es" | "fr" | "en"
+LANGS <- c("fr")  # "pt" | "es" | "fr" | "en"
 
 LABELS <- list(
   # Titles
-  title_deforestation_in = c(
-    fr = "Évolution annuelle de la déforestation à {territory}",
-    es = "Evolución anual de la deforestación en {territory}",
-    pt = "Evolução anual do desmatamento em {territory}",
-    en = "Annual evolution of deforestation in {territory}"
+  title_regrowth_in = c(
+    fr = "Évolution annuelle de la régénération à {territory}",
+    es = "Evolución anual de la regeneración en {territory}",
+    pt = "Evolução anual da regeneração em {territory}",
+    en = "Annual evolution of regrowth in {territory}"
   ),
   # Axes
   x_year = c(fr = "Année", pt = "Ano", es = "Año", en = "Year"),
@@ -61,36 +67,26 @@ LABELS <- list(
   )
 )
 
-# Dynamic label function
+# Dynamic label helper
 label <- function(key, ...) {
   template <- LABELS[[key]][[LANG]]
   glue::glue(template, .envir = rlang::env(...))
 }
 
-## 1.3 Palettes for sources (lines) ----
+## 1.3 Palette for source (line) ----
 # ------------------------------------------------------------------------- - - -
-source_line_colors <- c(
-  `JRC-TMF` = "#1f77b4",
-  MapBiomas = "#d58d2fff",
-  INPE      = "#d62728",
-  IDEAM     = "#9467bd"
-)
+# Single source (TMF). Color distinct from degradation.
+source_line_colors <- c(`TMF-JRC` = "#caa640ff")
+source_line_types  <- c(`TMF-JRC` = "solid")
 
-source_line_types <- c(
-  `JRC-TMF` = "solid",
-  MapBiomas = "solid",
-  INPE      = "solid",
-  IDEAM     = "solid"
-)
-
-## 1.4 Theme & scales (self-contained) ----
+## 1.4 Theme & scales ----
 # ------------------------------------------------------------------------- - - -
 theme_time_series <- function() {
   theme_minimal(base_size = 13) +
     theme(
       plot.title.position = "plot",
       plot.title          = element_text(hjust = 0.5, face = "bold", size = 16, margin = margin(b = 10)),
-      axis.text.x         = element_text(size = 11, angle = 45, hjust = 1, vjust = 1),
+      axis.text.x         = element_text(size = 11, angle = 45, hjust = 1, vjust = 1, margin = margin(t = 6)),
       axis.text.y         = element_text(size = 11),
       axis.title.x        = element_text(size = 12, margin = margin(t = 12)),
       axis.title.y        = element_text(size = 12, margin = margin(r = 12)),
@@ -163,38 +159,41 @@ axis_y_ha_auto <- function(y_max_raw) {
   )
 }
 
-
 ##%###########################################################################%##
 #                                                                               #
 #                         2) Utility Functions                               ----
 #                                                                               #
 ##%###########################################################################%##
 
-## 2.1 Map CSV column names to canonical sources ----
-# ------------------------------------------------------------------------- - - -
-map_col_to_source <- function(colname) {
+## 2.1 Map CSV column names to TMF (regrowth) ----
+# Robust mapping: accepts *area_ha* with "tmf" and any regrowth-like token.
+map_col_to_tmf_regrowth <- function(colname) {
   z <- tolower(colname)
-  if (str_detect(z, "tmf")       && str_detect(z, "area_ha")) return("JRC-TMF")
-  if (str_detect(z, "mapbiomas") && str_detect(z, "area_ha")) return("MapBiomas")
-  if (str_detect(z, "prodes")    && str_detect(z, "area_ha")) return("INPE")
-  if (str_detect(z, "ideam")     && str_detect(z, "area_ha")) return("IDEAM")
+  is_area <- str_detect(z, "area_ha")
+  has_tmf <- str_detect(z, "tmf")
+  has_reg <- str_detect(z, "regrow|regen|regener|recovery|reveg|reforest")
+  if (is_area && (has_tmf || has_reg)) return("TMF-JRC")
+  if (is_area) return("TMF-JRC")  # fallback for TMF-only CSVs
   NA_character_
 }
 
-## 2.2 Expected sources per territory ----
-# ------------------------------------------------------------------------- - - -
-expected_sources <- function(territory) {
-  switch(tolower(territory),
-         "cotriguacu"    = c("JRC-TMF","MapBiomas","INPE"),
-         "paragominas"   = c("JRC-TMF","MapBiomas","INPE"),
-         "guaviare"      = c("JRC-TMF","MapBiomas","IDEAM"),
-         "madre_de_dios" = c("JRC-TMF","MapBiomas"),
-         c("JRC-TMF","MapBiomas")
-  )
+## 2.2 Caption (TMF coverage + shown range) ----
+caption_tmf <- function(lang = "fr", source_span = "1990–2024",
+                        shown_min = NULL, shown_max = NULL) {
+  prefix <- switch(lang, "fr"="Sources — ", "pt"="Fontes — ",
+                         "es"="Fuentes — ", "en"="Sources — ", "Sources — ")
+  shown  <- if (!is.null(shown_min) && !is.null(shown_max)) {
+    switch(lang,
+      "fr" = glue::glue(" • Plage affichée : {shown_min}–{shown_max}"),
+      "pt" = glue::glue(" • Faixa exibida: {shown_min}–{shown_max}"),
+      "es" = glue::glue(" • Intervalo mostrado: {shown_min}–{shown_max}"),
+      "en" = glue::glue(" • Range shown: {shown_min}–{shown_max}")
+    )
+  } else ""
+  paste0(prefix, "TMF-JRC: ", source_span, shown)
 }
 
-## 2.3 Trim leading zeros per source (avoid flat lines glued at zero) ----
-# ------------------------------------------------------------------------- - - -
+## 2.3 Trim leading zeros (optional cosmetic) ----
 trim_leading_zeros <- function(y) {
   ix <- which(!is.na(y) & y > 0)
   if (length(ix) == 0) return(rep(NA_real_, length(y)))
@@ -202,28 +201,6 @@ trim_leading_zeros <- function(y) {
   out <- y
   out[seq_len(cut - 1)] <- NA_real_
   out
-}
-
-## 2.4 Coverage strings for each source ----
-# ------------------------------------------------------------------------- - - -
-SOURCE_COVERAGE <- c(
-  `JRC-TMF`  = "JRC-TMF: 1990–2024",
-  MapBiomas  = "MapBiomas: 1990–2023",
-  INPE       = "INPE: 2008–2024",
-  IDEAM      = "IDEAM: 2012–2023"
-)
-
-## 2.5 Caption dynamic for territories ----
-# ------------------------------------------------------------------------- - - -
-caption_for <- function(territory, present_sources, lang = "en") {
-  allowed <- expected_sources(territory)
-  used    <- intersect(present_sources, allowed)
-  used    <- used[!is.na(used) & used %in% names(SOURCE_COVERAGE)]
-  if (length(used) == 0) return("")
-  cov_str <- paste(unname(SOURCE_COVERAGE[used]), collapse = " | ")
-  prefix <- switch(lang, "fr"="Sources — ", "pt"="Fontes — ", "es"="Fuentes — ",
-                         "en"="Sources — ", "Sources — ")
-  paste0(prefix, cov_str)
 }
 
 ##%###########################################################################%##
@@ -241,14 +218,14 @@ for (LANG in LANGS) {
     cat("\n", paste(rep("=", 64), collapse=""), "\n", sep = "")
 
     INPUT_DIR  <- file.path("results/metrics", TERRITORY)
-    OUTPUT_DIR <- file.path("results/plots",   TERRITORY, glue(TERRITORY, '_', LANG))
+    OUTPUT_DIR <- file.path("results/plots", TERRITORY, glue("{TERRITORY}_{LANG}"))
     if (!dir.exists(OUTPUT_DIR)) dir.create(OUTPUT_DIR, recursive = TRUE)
 
-    ### 3.1 Load main deforestation CSV ----
+    ### 3.1 Load regrowth CSV (TMF-only) ----
     # ----------------------------------------------------------------------- - - -
     main_csv <- list.files(
       INPUT_DIR,
-      pattern = glue("^{TERRITORY}_deforestation_.*\\.csv$"),
+      pattern = glue("^{TERRITORY}_regrowth_.*\\.csv$"),
       full.names = TRUE, ignore.case = TRUE
     )
     if (length(main_csv) == 0) {
@@ -258,7 +235,7 @@ for (LANG in LANGS) {
     message(glue("📊 Loading: {basename(main_csv[1])}"))
     df <- suppressMessages(readr::read_csv(main_csv[1], show_col_types = FALSE))
 
-    # robust year column detection
+    # Robust year column detection
     nms_lc <- tolower(names(df))
     year_candidates <- c("year","ano","yr","year_int")
     year_idx <- match(year_candidates, nms_lc, nomatch = 0)
@@ -269,7 +246,7 @@ for (LANG in LANGS) {
     year_col <- names(df)[year_idx[year_idx > 0][1]]
     message(glue("✓ Using year column: '{year_col}'"))
 
-    # *_area_ha columns
+    # Identify '*_area_ha' columns belonging to TMF regrowth
     area_cols <- names(df)[str_detect(tolower(names(df)), "area_ha$")]
     if (length(area_cols) == 0) {
       message("⚠ No '*_area_ha' columns found — skipping.")
@@ -277,11 +254,12 @@ for (LANG in LANGS) {
     }
     message(glue("✓ Area columns: {paste(area_cols, collapse=', ')}"))
 
+    # Long format with TMF-only mapping
     long_main <- df %>%
       select(all_of(c(year_col, area_cols))) %>%
       pivot_longer(cols = all_of(area_cols), names_to = "var", values_to = "area_ha") %>%
       mutate(
-        source_used = vapply(var, map_col_to_source, character(1)),
+        source_used = vapply(var, map_col_to_tmf_regrowth, character(1)),
         year        = as.integer(.data[[year_col]]),
         area_ha     = suppressWarnings(as.numeric(area_ha))
       ) %>%
@@ -289,123 +267,81 @@ for (LANG in LANGS) {
       select(year, source_used, area_ha) %>%
       arrange(year, source_used)
 
-    ### 3.2 IDEAM integration (Guaviare only) ----
+    ### 3.2 Filter, cast, and validate ----
     # ----------------------------------------------------------------------- - - -
-    if (tolower(TERRITORY) == "guaviare") {
-      ideam_csv <- list.files(
-        INPUT_DIR,
-        pattern = glue("^{TERRITORY}.*deforestation_ideam.*\\.csv$"),
-        full.names = TRUE, ignore.case = TRUE
-      )
-      if (length(ideam_csv) > 0) {
-        message(glue("🔗 Integrating IDEAM: {basename(ideam_csv[1])}"))
-        ideam <- suppressMessages(readr::read_csv(ideam_csv[1], show_col_types = FALSE))
-        if (all(c("year", "def_year_ha") %in% names(ideam))) {
-          ideam_long <- ideam %>%
-            transmute(
-              year        = as.integer(.data[["year"]]),
-              source_used = "IDEAM",
-              area_ha     = as.numeric(.data[["def_year_ha"]])
-            ) %>%
-            filter(!is.na(year), !is.na(area_ha), year >= 2012)
-          long_main <- bind_rows(long_main, ideam_long)
-          message("✓ IDEAM merged.")
-        } else {
-          message("⚠ IDEAM: required columns not found — skipping merge.")
-        }
-      } else {
-        message("ℹ IDEAM CSV not found — proceeding without it.")
-      }
-    }
-
-    ### 3.3 Filter, type-cast, and validate ----
-    # ----------------------------------------------------------------------- - - -
-    # Coverage years per source 
-    YEAR_MIN <- c(`JRC-TMF` = 1990L, MapBiomas = 1990L, INPE = 2008L, IDEAM = 2012L)
-    YEAR_MAX <- c(`JRC-TMF` = 2024L, MapBiomas = 2023L, INPE = 2024L, IDEAM = 2023L)
-    
-    expected <- expected_sources(TERRITORY)
-
     df_long <- long_main %>%
-      filter(source_used %in% expected) %>%
       mutate(
-        source_used = factor(source_used, levels = expected),
+        source_used = factor(source_used, levels = "TMF-JRC"),
         year        = as.integer(year),
         area_ha     = pmax(suppressWarnings(as.numeric(area_ha)), 0)
       ) %>%
-      # >>> enforce source coverage to avoid spurious 2024 for MapBiomas <<<
-      filter(
-        year >= YEAR_MIN[as.character(source_used)],
-        year <= YEAR_MAX[as.character(source_used)]
-      ) %>%
-      arrange(year, source_used)
-
-    # Trim leading zeros to avoid a flat line at zero
-    df_long <- df_long %>%
+      arrange(year, source_used) %>%
       group_by(source_used) %>%
-      arrange(year, .by_group = TRUE) %>%
       mutate(area_ha = trim_leading_zeros(area_ha)) %>%
       ungroup()
 
     if (nrow(df_long) == 0) {
-      message(glue("⚠ No rows after filtering expected sources: {paste(expected, collapse=', ')}"))
+      message("⚠ No rows after filtering/mapping — skipping.")
       next
     }
 
-    # Build palette after final filtering
-    present_sources <- levels(droplevels(df_long$source_used))
+    present_sources <- levels(droplevels(df_long$source_used))  # "JRC-TMF"
     cols <- source_line_colors[present_sources]
     ltys <- source_line_types[present_sources]
     year_min <- min(df_long$year, na.rm = TRUE)
     year_max <- max(df_long$year, na.rm = TRUE)
-    message(glue("✓ Sources present: {paste(present_sources, collapse=', ')}"))
-    message(glue("✓ Year range: {year_min}–{year_max} (n={nrow(df_long)})"))
 
-    # Defensive subset for plotting
-    df_plot <- df_long %>% filter(!is.na(area_ha)) %>% droplevels()
+    # Determine plotting window after configured drops
+    plot_min <- year_min + DROP_FIRST_YEARS
+    plot_max <- year_max - DROP_LAST_YEARS
+
+    # Apply plotting window filter
+    df_plot <- df_long %>%
+      filter(!is.na(area_ha), dplyr::between(year, plot_min, plot_max)) %>%
+      droplevels()
+
     if (nrow(df_plot) == 0) {
       message(glue("⚠ No valid data after processing for {TERRITORY}"))
       next
     }
 
     territory_title <- TERRITORY_LABELS[[TERRITORY]]
-    present_sources <- levels(df_plot$source_used)
 
-    ### 3.4 Plot ----
-    # ----------------------------------------------------------------------- - - -
+    ### 3.3 Plot ----
+    # ------------------------------------------------------------------------- - - -
     p <- ggplot(df_plot, aes(x = year, y = area_ha, color = source_used, linetype = source_used)) +
       geom_line(linewidth = 1.2, lineend = "round", na.rm = TRUE) +
       geom_point(size = 4, stroke = 0, na.rm = TRUE) +
       scale_color_manual(values = cols, breaks = present_sources, guide = guide_legend(title = NULL)) +
       scale_linetype_manual(values = ltys, breaks = present_sources, guide = "none") +
-      axis_x_years_all(year_min, year_max) +
+      axis_x_years_all(plot_min, plot_max) +
       # axis_y_thousands_auto(max(df_plot$area_ha, na.rm = TRUE)) +
       axis_y_ha_auto(max(df_plot$area_ha, na.rm = TRUE)) +
       labs(
-        title   = label("title_deforestation_in", territory = territory_title),
+        title   = label("title_regrowth_in", territory = territory_title),
         x       = label("x_year"),
         y       = label("y_area_ha"),
-        caption = caption_for(TERRITORY, present_sources, LANG)
+        caption = caption_tmf(LANG, shown_min = plot_min, shown_max = plot_max)
       ) +
       theme_time_series()
 
     print(p)
     message(glue("✓ Plot generated for {TERRITORY}"))
 
-    ### 3.5 Export (fixed full-page size) ----
-    # ----------------------------------------------------------------------- - - -
+    ### 3.4 Export (fixed full-page size) ----
+    # ------------------------------------------------------------------------- - - -
     if (WRITE_PLOT) {
-      file_stub <- glue("01_{TERRITORY}_deforestation_{LANG}")
-      png_path  <- file.path(OUTPUT_DIR, glue("{file_stub}.png"))
+      file_stub <- glue("03_{TERRITORY}_regrowth_{LANG}")
 
-      # PNG 
+      # PNG
+      png_path <- file.path(OUTPUT_DIR, glue("{file_stub}.png"))
       ggsave(
         filename = png_path, plot = p,
         width = FIG_WIDTH_MM, height = FIG_HEIGHT_MM, units = UNITS,
         dpi = DPI, bg = "white"
       )
 
-      # SVG
+      # SVG (optional)
       if (isTRUE(WRITE_SVG)) {
         svg_path <- file.path(OUTPUT_DIR, glue("{file_stub}.svg"))
         ggsave(
@@ -425,6 +361,7 @@ for (LANG in LANGS) {
     } else {
       message("ℹ Preview mode — set WRITE_PLOT <- TRUE to export.")
     }
+
     cat("\n", paste(rep("-", 64), collapse=""), "\n", sep = "")
   }
 }

@@ -70,8 +70,8 @@ label <- function(key, ...) {
 ## 1.3 Palette for source (lines) ----
 # ------------------------------------------------------------------------- - - -
 # Only JRC-TMF is plotted here.
-source_line_colors <- c(`JRC-TMF` = "#649b23ff")
-source_line_types  <- c(`JRC-TMF` = "solid")
+source_line_colors <- c(`TMF-JRC` = "#4b8804ff")
+source_line_types  <- c(`TMF-JRC` = "solid")
 
 ## 1.4 Theme & scales (kept identical to deforestation) ----
 # ------------------------------------------------------------------------- - - -
@@ -164,8 +164,8 @@ axis_y_ha_auto <- function(y_max_raw) {
 # Accept columns that contain *area_ha* and (tmf OR degrad*) to be robust to variants.
 map_col_to_tmf <- function(colname) {
   z <- tolower(colname)
-  if (str_detect(z, "area_ha") && (str_detect(z, "tmf") || str_detect(z, "degrad"))) return("JRC-TMF")
-  if (str_detect(z, "area_ha")) return("JRC-TMF")  # fallback for TMF-only CSVs
+  if (str_detect(z, "area_ha") && (str_detect(z, "tmf") || str_detect(z, "degrad"))) return("TMF-JRC")
+  if (str_detect(z, "area_ha")) return("TMF-JRC")  # fallback for TMF-only CSVs
   NA_character_
 }
 
@@ -173,7 +173,7 @@ map_col_to_tmf <- function(colname) {
 # ------------------------------------------------------------------------- - - -
 caption_tmf <- function(lang = "fr") {
   prefix <- switch(lang, "fr"="Sources — ", "pt"="Fontes — ", "es"="Fuentes — ", "en"="Sources — ", "Sources — ")
-  paste0(prefix, "JRC-TMF: 1990–2024")
+  paste0(prefix, "TMF-JRC: 1990–2024")
 }
 
 ## 2.3 Trim leading zeros (avoid flat lines glued at zero) ----
@@ -255,7 +255,7 @@ for (LANG in LANGS) {
     # ----------------------------------------------------------------------- - - -
     df_long <- long_main %>%
       mutate(
-        source_used = factor(source_used, levels = "JRC-TMF"),
+        source_used = factor(source_used, levels = "TMF-JRC"),
         year        = as.integer(year),
         area_ha     = pmax(suppressWarnings(as.numeric(area_ha)), 0)
       ) %>%
