@@ -70,7 +70,7 @@ label <- function(key, ...) {
 ## 1.3 Palette for source (lines) ----
 # ------------------------------------------------------------------------- - - -
 # Only JRC-TMF is plotted here.
-source_line_colors <- c(`TMF-JRC` = "#4b8804ff")
+source_line_colors <- c(`TMF-JRC` = "#649B23")
 source_line_types  <- c(`TMF-JRC` = "solid")
 
 ## 1.4 Theme & scales (kept identical to deforestation) ----

@@ -25,7 +25,7 @@ import subprocess
 gdal_retile_path = r"C:\Users\caslu\miniforge3\envs\pygeo\Scripts\gdal_retile.py"
 
 # Define working directory and paths
-data_folder = "data/raster/mspa_2024/"
+data_folder = "data/raster/mspa_2023/"
 input_raster = os.path.join(data_folder, "forest_mask_recode_mspa.tif")
 output_folder = os.path.join(data_folder, "inputs")
 

@@ -5,8 +5,8 @@ set -Eeuo pipefail
 echo "Startin at $(date) with $(nproc) CPUs visible"
 
 # -------- user paths --------------------------------------------------------
-TILES_DIR="/mnt/c/dados/sig/cirad/terramaz/data/raster/mspa_2024/inputs"
-RESULTS_DIR="/mnt/c/dados/sig/cirad/terramaz/data/raster/mspa_2024/outputs"
+TILES_DIR="/mnt/c/dados/sig/cirad/terramaz/data/raster/mspa_2023/inputs"
+RESULTS_DIR="/mnt/c/dados/sig/cirad/terramaz/data/raster/mspa_2023/outputs"
 LOG_DIR="$HOME/mspa_logs"
 THREADS=4                 # Nº of cores to use
 DISKFLAG=1                # Line 31 in mspa-parameters.txt

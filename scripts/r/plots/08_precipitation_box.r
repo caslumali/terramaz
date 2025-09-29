@@ -1,6 +1,6 @@
 ##%###########################################################################%##
 #                                                                               #
-#                         Temperature Boxplots (TMF)                          ----
+#                         Precipitation Boxplots (TMF)                       ----
 #                                                                               #
 ##%###########################################################################%##
 
@@ -41,7 +41,7 @@ ROOT_IN  <- "results/metrics"
 ROOT_OUT <- "results/plots"
 
 # File name stub and figure size
-FILENAME_STUB <- "temp_box"
+FILENAME_STUB <- "precip_box"
 FIG_WIDTH_MM  <- 431.8  # 17 in
 FIG_HEIGHT_MM <- 220    # a bit taller for boxplots
 UNITS         <- "mm"
@@ -65,32 +65,37 @@ SEP_LINE_ALPHA <- 0.9
 LANGS <- c("fr")  # "pt" | "es" | "fr" | "en"
 LABELS <- list(
   # Titles
-  title_temp_annual_in = c(
-    fr = "Température annuelle à {territory}",
-    es = "Temperatura anual en {territory}",
-    pt = "Temperatura anual em {territory}",
-    en = "Annual temperature in {territory}"
+  title_precip_annual_in = c(
+    fr = "Précipitations annuelles à {territory}",
+    es = "Precipitación anual en {territory}",
+    pt = "Precipitação anual em {territory}",
+    en = "Annual precipitation in {territory}"
   ),
-  title_temp_monthly_in = c(
-    fr = "Climatologie mensuelle (jour) à {territory}",
-    es = "Climatología mensual (diurna) en {territory}",
-    pt = "Climatologia mensal (diurna) em {territory}",
-    en = "Monthly climatology (daytime) in {territory}"
+  title_precip_monthly_in = c(
+    fr = "Climatologie mensuelle des précipitations à {territory}",
+    es = "Climatología mensual de precipitación en {territory}",
+    pt = "Climatologia mensal de precipitação em {territory}",
+    en = "Monthly precipitation climatology in {territory}"
   ),
   # Axes
   x_year = c(fr="Année", es="Año", pt="Ano", en="Year"),
   x_month = c(fr="Mois", es="Mes", pt="Mês", en="Month"),
-  y_temp = c(fr="Température (°C)", es="Temperatura (°C)", pt="Temperatura (°C)", en="Temperature (°C)"),
+  y_precip = c(
+  fr = "Précipitation (mm)",
+  es = "Precipitación (mm)",
+  pt = "Precipitação (mm)",
+  en = "Precipitation (mm)"
+),
   # Caption
-  caption_temp = c(
-    fr = "Sources — MODIS MYD11A2 (diurne, moyenne/boîtes), masque TMF-JRC médian (1 km); 2003–2024",
-    es = "Fuentes — MODIS MYD11A2 (diurno, medias/cajas), máscara TMF-JRC mediana (1 km); 2003–2024",
-    pt = "Fontes — MODIS MYD11A2 (diurno, médias/boxplots), máscara TMF-JRC mediana (1 km); 2003–2024",
-    en = "Sources — MODIS MYD11A2 (daytime, means/boxplots), TMF-JRC median mask (1 km); 2003–2024"
+  caption_precip = c(
+    fr = "Sources — CHIRPS (pentades → sommes mensuelles/annuelles), masque TMF-JRC médian (1 km); 2003–2024",
+    es = "Fuentes — CHIRPS (péntadas → sumas mensuales/anuales), máscara TMF-JRC mediana (1 km); 2003–2024",
+    pt = "Fontes — CHIRPS (pêntadas → somas mensais/anuais), máscara TMF-JRC mediana (1 km); 2003–2024",
+    en = "Sources — CHIRPS (pentads → monthly/annual sums), TMF-JRC median mask (1 km); 2003–2024"
   )
 )
 
-# TMF class labels per language
+# Labels for TMF classes per language
 TMF_LABELS <- list(
   fr = c(
     "Undisturbed" = "Forêt non perturbée",
@@ -134,7 +139,7 @@ MONTH_LABELS <- list(
 
 ## 1.3 TMF palette & aesthetics ----
 # ------------------------------------------------------------------------- - - -
-# Fill palette (as requested)
+# Fill palette
 # tmf_fill <- c(
 #   "Undisturbed" = "#295029ff",
 #   "Degraded"    = "#4b8804ff",
@@ -146,7 +151,7 @@ tmf_fill <- c(
   "Undisturbed" = "#005A00",
   "Degraded"    = "#649B23",
   "Deforested"    = "#FF871F",
-  "Regrowth"    = "#D2FA3C"
+  "Regrowth"    = "#b3dc21ff"
 )
 
 TMF_CLASS_LEVELS <- c("Undisturbed", "Degraded", "Deforested", "Regrowth")
@@ -213,7 +218,7 @@ Y_WHISKER_MARGIN  <- 0.05
 Y_LIMS_OVERRIDE   <- list()  
 
 # Function to compute adaptive y-limits based on boxplot whiskers
-compute_y_limits <- function(df, value_col = "temperature_c", territory = NULL) {
+compute_y_limits <- function(df, value_col = "precipitation_mm", territory = NULL) {
   # Override if specified for this territory
   if (!is.null(territory) && length(Y_LIMS_OVERRIDE) && territory %in% names(Y_LIMS_OVERRIDE)) {
     return(Y_LIMS_OVERRIDE[[territory]])
@@ -240,7 +245,6 @@ compute_y_limits <- function(df, value_col = "temperature_c", territory = NULL) 
   c(lo - pad, hi + pad)
 }
 
-
 ##%###########################################################################%##
 #                                                                               #
 #                         2) Utility Functions                               ----
@@ -260,15 +264,15 @@ detect_col <- function(nms, candidates_regex) {
 
 ## 2.2 Plot builders ----
 # ------------------------------------------------------------------------- - - -
-plot_temp_annual_boxes <- function(df, lang, territory_title) {
-  # df: pixel-level annual data with columns year, temperature_c, tmf_class_label
+plot_precip_annual_boxes <- function(df, lang, territory_title) {
+  # df: pixel-level annual data with columns year, precipitation_mm, tmf_class_label
   df <- df %>%
     mutate(
       year  = as.integer(year),
       year_f = factor(as.character(year), levels = as.character(seq.int(YEAR_MIN, YEAR_MAX, 1))),
       tmf_class_label = factor(tmf_class_label, levels = TMF_CLASS_LEVELS)
     ) %>%
-    filter(!is.na(year_f), !is.na(temperature_c), !is.na(tmf_class_label))
+    filter(!is.na(year_f), !is.na(precipitation_mm), !is.na(tmf_class_label))
 
   # Optional downsampling to keep groups balanced and fast
   if (is.finite(MAX_ROWS_PER_GROUP)) {
@@ -278,11 +282,11 @@ plot_temp_annual_boxes <- function(df, lang, territory_title) {
       ungroup()
   }
 
-  y_limits <- compute_y_limits(df, "temperature_c", territory = tolower(territory_title))
+  y_limits <- compute_y_limits(df, "precipitation_mm", territory = tolower(territory_title))
 
   ggplot(
     df,
-    aes(x = year_f, y = temperature_c, fill = tmf_class_label, color = tmf_class_label)
+    aes(x = year_f, y = precipitation_mm, fill = tmf_class_label, color = tmf_class_label)
   ) +
     geom_boxplot(
       width = 0.70,
@@ -321,24 +325,24 @@ plot_temp_annual_boxes <- function(df, lang, territory_title) {
     scale_y_continuous(expand = expansion(mult = c(0.02, 0.04))) +
     coord_cartesian(ylim = y_limits, expand = FALSE) +
     labs(
-      title   = label("title_temp_annual_in", territory = territory_title),
+      title   = label("title_precip_annual_in", territory = territory_title),
       x       = label("x_year"),
-      y       = label("y_temp"),
-      caption = label("caption_temp")
+      y       = label("y_precip"),
+      caption = label("caption_precip")
     ) +
     theme_boxplots() +
     guides(fill = guide_legend(nrow = 1))
 }
 
-plot_temp_monthly_boxes <- function(df, lang, territory_title) {
-  # df: pixel-level monthly data with columns year, month, temperature_c, tmf_class_label
+plot_precip_monthly_boxes <- function(df, lang, territory_title) {
+  # df: pixel-level monthly data with columns year, month, precipitation_mm, tmf_class_label
   df <- df %>%
     mutate(
       month   = as.integer(month),
       month_f = factor(sprintf("%02d", month), levels = sprintf("%02d", 1:12)),
       tmf_class_label = factor(tmf_class_label, levels = TMF_CLASS_LEVELS)
     ) %>%
-    filter(!is.na(month_f), !is.na(temperature_c), !is.na(tmf_class_label))
+    filter(!is.na(month_f), !is.na(precipitation_mm), !is.na(tmf_class_label))
 
   # Optional downsampling to keep groups balanced and fast
   if (is.finite(MAX_ROWS_PER_GROUP)) {
@@ -348,11 +352,11 @@ plot_temp_monthly_boxes <- function(df, lang, territory_title) {
       ungroup()
   }
 
-  y_limits <- compute_y_limits(df, "temperature_c", territory = tolower(territory_title))
+  y_limits <- compute_y_limits(df, "precipitation_mm", territory = tolower(territory_title))
 
   ggplot(
     df,
-    aes(x = month_f, y = temperature_c, fill = tmf_class_label, color = tmf_class_label)
+    aes(x = month_f, y = precipitation_mm, fill = tmf_class_label, color = tmf_class_label)
   ) +
     geom_boxplot(
       width = 0.70,
@@ -391,10 +395,10 @@ plot_temp_monthly_boxes <- function(df, lang, territory_title) {
     scale_y_continuous(expand = expansion(mult = c(0.02, 0.04))) +
     coord_cartesian(ylim = y_limits, expand = FALSE) +
     labs(
-      title   = label("title_temp_monthly_in", territory = territory_title),
+      title   = label("title_precip_monthly_in", territory = territory_title),
       x       = label("x_month"),
-      y       = label("y_temp"),
-      caption = label("caption_temp")
+      y       = label("y_precip"),
+      caption = label("caption_precip")
     ) +
     theme_boxplots() +
     guides(fill = guide_legend(nrow = 1))
@@ -431,18 +435,18 @@ for (LANG in LANGS) {
       message(glue("📄 Annual CSV: {basename(annual_csv[1])}"))
       annual_df <- suppressMessages(readr::read_csv(annual_csv[1], show_col_types = FALSE))
       # Detect columns
-      col_temp  <- detect_col(names(annual_df), "temperature|temp_?c")
-      col_year  <- detect_col(names(annual_df), "^year$|\\byear\\b|ano|annee|anno")
-      col_tmf   <- detect_col(names(annual_df), "tmf.*label|class.*label")
-      if (is.na(col_temp) || is.na(col_year) || is.na(col_tmf)) {
+      col_precip <- detect_col(names(annual_df), "precip|precipitation_?mm")
+      col_year   <- detect_col(names(annual_df), "^year$|\\byear\\b|ano|annee|anno")
+      col_tmf    <- detect_col(names(annual_df), "tmf.*label|class.*label")
+      if (is.na(col_precip) || is.na(col_year) || is.na(col_tmf)) {
         stop(glue(
-          "Annual CSV missing required columns. Found: temp='{col_temp}', year='{col_year}', tmf_label='{col_tmf}'."
+          "Annual CSV missing required columns. Found: precip='{col_precip}', year='{col_year}', tmf_label='{col_tmf}'."
         ), call. = FALSE)
       }
       annual_df <- annual_df %>%
         transmute(
           year = .data[[col_year]],
-          temperature_c = suppressWarnings(as.numeric(.data[[col_temp]])),
+          precipitation_mm = suppressWarnings(as.numeric(.data[[col_precip]])),
           tmf_class_label = as.character(.data[[col_tmf]])
         )
     }
@@ -457,20 +461,20 @@ for (LANG in LANGS) {
       message(glue("📄 Monthly CSV: {basename(monthly_csv[1])}"))
       monthly_df <- suppressMessages(readr::read_csv(monthly_csv[1], show_col_types = FALSE))
       # Detect columns
-      col_temp  <- detect_col(names(monthly_df), "temperature|temp_?c")
-      col_year  <- detect_col(names(monthly_df), "^year$|\\byear\\b|ano|annee|anno")
-      col_month <- detect_col(names(monthly_df), "^month$|\\bmonth\\b|mois|mes")
-      col_tmf   <- detect_col(names(monthly_df), "tmf.*label|class.*label")
-      if (is.na(col_temp) || is.na(col_year) || is.na(col_month) || is.na(col_tmf)) {
+      col_precip  <- detect_col(names(monthly_df), "precip|precipitation_?mm")
+      col_year   <- detect_col(names(monthly_df), "^year$|\\byear\\b|ano|annee|anno")
+      col_month  <- detect_col(names(monthly_df), "^month$|\\bmonth\\b|mois|mes")
+      col_tmf    <- detect_col(names(monthly_df), "tmf.*label|class.*label")
+      if (is.na(col_precip) || is.na(col_year) || is.na(col_month) || is.na(col_tmf)) {
         stop(glue(
-          "Monthly CSV missing required columns. Found: temp='{col_temp}', year='{col_year}', month='{col_month}', tmf_label='{col_tmf}'."
+          "Monthly CSV missing required columns. Found: precip='{col_precip}', year='{col_year}', month='{col_month}', tmf_label='{col_tmf}'."
         ), call. = FALSE)
       }
       monthly_df <- monthly_df %>%
         transmute(
           year = .data[[col_year]],
           month = .data[[col_month]],
-          temperature_c = suppressWarnings(as.numeric(.data[[col_temp]])),
+          precipitation_mm = suppressWarnings(as.numeric(.data[[col_precip]])),
           tmf_class_label = as.character(.data[[col_tmf]])
         )
     }
@@ -480,9 +484,9 @@ for (LANG in LANGS) {
     ## 3.4 Annual plot ----
     # ----------------------------------------------------------------------- - - -
     if (!is.null(annual_df)) {
-      pA <- plot_temp_annual_boxes(annual_df, LANG, territory_title)
+      pA <- plot_precip_annual_boxes(annual_df, LANG, territory_title)
       if (WRITE_PLOT) {
-        file_stub <- glue("06a_{TERRITORY}_temp_annual_box_{LANG}")
+        file_stub <- glue("07a_{TERRITORY}_precip_annual_box_{LANG}")
         png_path  <- file.path(OUTPUT_DIR, glue("{file_stub}.png"))
         ggsave(png_path, pA, width = FIG_WIDTH_MM, height = FIG_HEIGHT_MM, units = UNITS, dpi = DPI, bg = "white")
         if (isTRUE(WRITE_SVG)) {
@@ -501,9 +505,9 @@ for (LANG in LANGS) {
     ## 3.5 Monthly climatology plot ----
     # ----------------------------------------------------------------------- - - -
     if (!is.null(monthly_df)) {
-      pM <- plot_temp_monthly_boxes(monthly_df, LANG, territory_title)
+      pM <- plot_precip_monthly_boxes(monthly_df, LANG, territory_title)
       if (WRITE_PLOT) {
-        file_stub <- glue("06b_{TERRITORY}_temp_monthly_box_{LANG}")
+        file_stub <- glue("07b_{TERRITORY}_precip_monthly_box_{LANG}")
         png_path  <- file.path(OUTPUT_DIR, glue("{file_stub}.png"))
         ggsave(png_path, pM, width = FIG_WIDTH_MM, height = FIG_HEIGHT_MM, units = UNITS, dpi = DPI, bg = "white")
         if (isTRUE(WRITE_SVG)) {
@@ -523,5 +527,5 @@ for (LANG in LANGS) {
   }
 }
 
-message("✓ Temperature boxplots done.")
+message("✓ Precipitation boxplots done.")
 

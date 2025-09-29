@@ -15,7 +15,7 @@ from osgeo import gdal
 gdal.UseExceptions()
 
 # Define working directory and input/output paths
-data_folder = "data/raster/mspa_2024/"
+data_folder = "data/raster/mspa_2023/"
 input_raster = os.path.join(data_folder, "forest_mask_binary_mosaic.tif")
 output_raster = os.path.join(data_folder, "forest_mask_binary_eqearth.tif")
 

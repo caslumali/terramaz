@@ -23,21 +23,21 @@ from osgeo import gdal
 gdal.UseExceptions()
 
 # Input/output directories
-data_folder = "UE1001_StageM2/data/vegetation/veg3_gwb_mspa_2019"
-tile_dir = os.path.join(data_folder, "veg3_mspa_outputs")
+data_folder = "data/raster/mspa_2023/"
+tile_dir = os.path.join(data_folder, "outputs")
 
 # Input reference raster in EPSG:4326 (used to guide reprojection)
-reference_raster = os.path.join(data_folder, "veg3_binary_mosaic.tif")
+reference_raster = os.path.join(data_folder, "forest_mask_binary_mosaic.tif")
 
 # Output file paths
-mosaic_eqearth = os.path.join(data_folder, "veg3_mspa_eqearth.tif")
-mosaic_wgs84   = os.path.join(data_folder, "veg3_mspa_epsg4326.tif")
+mosaic_eqearth = os.path.join(data_folder, "amazon_mspa_2023_eqearth.tif")
+mosaic_wgs84   = os.path.join(data_folder, "amazon_mspa_2023_epsg4326.tif")
 
 #===============================================================================
 # 2. VALIDATION
 #===============================================================================
 tile_paths = sorted(glob(os.path.join(tile_dir, "*_mspa.tif")))
-assert len(tile_paths) == 49, f"Expected 49 tiles, found {len(tile_paths)}"
+assert len(tile_paths) == 72, f"Expected 72 tiles, found {len(tile_paths)}"
 
 # Set color interpretation to gray index for all tiles
 print("Setting color interpretation to gray index for all tiles...")

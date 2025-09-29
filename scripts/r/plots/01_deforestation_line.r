@@ -70,8 +70,8 @@ label <- function(key, ...) {
 ## 1.3 Palettes for sources (lines) ----
 # ------------------------------------------------------------------------- - - -
 source_line_colors <- c(
-  `JRC-TMF` = "#1f77b4",
-  MapBiomas = "#d58d2fff",
+  `JRC-TMF` = "#FF871F",
+  MapBiomas = "#1f77b4",
   INPE      = "#d62728",
   IDEAM     = "#9467bd"
 )
@@ -134,7 +134,6 @@ axis_y_ha_auto <- function(y_max_raw) {
   )
 }
 
-
 ##%###########################################################################%##
 #                                                                               #
 #                         2) Utility Functions                               ----
@@ -147,7 +146,7 @@ map_col_to_source <- function(colname) {
   z <- tolower(colname)
   if (str_detect(z, "tmf")       && str_detect(z, "area_ha")) return("JRC-TMF")
   if (str_detect(z, "mapbiomas") && str_detect(z, "area_ha")) return("MapBiomas")
-  if (str_detect(z, "prodes")    && str_detect(z, "area_ha")) return("INPE")
+  if ((str_detect(z, "prodes") || str_detect(z, "inpe")) && str_detect(z, "area_ha")) return("INPE")
   if (str_detect(z, "ideam")     && str_detect(z, "area_ha")) return("IDEAM")
   NA_character_
 }
@@ -175,27 +174,63 @@ trim_leading_zeros <- function(y) {
   out
 }
 
-## 2.4 Coverage strings for each source ----
+## 2.4 Readers for complemenary CSVs ----
 # ------------------------------------------------------------------------- - - -
-SOURCE_COVERAGE <- c(
-  `JRC-TMF`  = "JRC-TMF: 1990–2024",
-  MapBiomas  = "MapBiomas: 1990–2023",
-  INPE       = "INPE: 2008–2024",
-  IDEAM      = "IDEAM: 2012–2023"
-)
+read_prodes_official <- function(path) {
+  if (!file.exists(path)) return(NULL)
+  # robust read with , as decimal and . as thousands separator
+  loc <- readr::locale(decimal_mark = ",", grouping_mark = ".", encoding = "UTF-8")
+  df <- tryCatch(readr::read_csv2(path, show_col_types = FALSE, locale = loc),
+                 error = function(e) readr::read_csv(path, show_col_types = FALSE, locale = loc))
+  if (ncol(df) < 2) return(NULL)
+  names(df)[1:2] <- c("year_raw", "km2_raw")
+  out <- df %>%
+    mutate(
+      year = readr::parse_integer(year_raw, na = c("Year", "Ano")),
+      km2  = readr::parse_number(km2_raw, locale = loc)
+    ) %>%
+    filter(!is.na(year), !is.na(km2)) %>%
+    transmute(year = as.integer(year), area_ha = as.numeric(km2) * 100)
+  if (nrow(out) == 0) return(NULL)
+  out
+}
+
+read_mb_site <- function(path) {
+  if (!file.exists(path)) return(NULL)
+  loc <- readr::locale(decimal_mark = ",", grouping_mark = ".", encoding = "UTF-8")
+  df  <- readr::read_csv(path, show_col_types = FALSE, locale = loc)
+
+  # Identify year column (flexible)
+  year_col <- names(df)[stringr::str_detect(tolower(names(df)), "^(ano|year)$")]
+  if (length(year_col) == 0) return(NULL)
+  value_cols <- setdiff(names(df), year_col)
+
+  out <- df %>%
+    rename(year = all_of(year_col)) %>%
+    mutate(across(all_of(value_cols), ~ dplyr::na_if(stringr::str_trim(as.character(.x)), "-"))) %>%
+    mutate(across(all_of(value_cols), ~ readr::parse_number(.x, locale = loc))) %>%
+    mutate(across(all_of(value_cols), ~ tidyr::replace_na(.x, 0))) %>%
+    mutate(area_ha = rowSums(across(all_of(value_cols)), na.rm = TRUE)) %>%
+    transmute(year = as.integer(year), area_ha = as.numeric(area_ha)) %>%
+    filter(!is.na(year))
+  if (nrow(out) == 0) return(NULL)
+  out
+}
 
 ## 2.5 Caption dynamic for territories ----
 # ------------------------------------------------------------------------- - - -
-caption_for <- function(territory, present_sources, lang = "en") {
-  allowed <- expected_sources(territory)
-  used    <- intersect(present_sources, allowed)
-  used    <- used[!is.na(used) & used %in% names(SOURCE_COVERAGE)]
-  if (length(used) == 0) return("")
-  cov_str <- paste(unname(SOURCE_COVERAGE[used]), collapse = " | ")
-  prefix <- switch(lang, "fr"="Sources — ", "pt"="Fontes — ", "es"="Fuentes — ",
-                         "en"="Sources — ", "Sources — ")
+caption_for <- function(df_in, lang = "en") {
+  if (is.null(df_in) || nrow(df_in) == 0) return("")
+  cov <- df_in %>%
+    filter(!is.na(year), !is.na(area_ha)) %>%
+    group_by(source_used) %>%
+    summarise(miny = min(year), maxy = max(year), .groups = "drop") %>%
+    arrange(factor(source_used, levels = c("JRC-TMF","MapBiomas","INPE","IDEAM")))
+  cov_str <- paste0(cov$source_used, ": ", cov$miny, "-", cov$maxy, collapse = " | ")
+  prefix <- switch(lang, "fr"="Sources — ", "pt"="Fontes — ", "es"="Fuentes — ", "en"="Sources — ", "Sources — ")
   paste0(prefix, cov_str)
 }
+
 
 ##%###########################################################################%##
 #                                                                               #
@@ -211,19 +246,20 @@ for (LANG in LANGS) {
     cat(glue("PROCESSING: {toupper(TERRITORY)}"))
     cat("\n", paste(rep("=", 64), collapse=""), "\n", sep = "")
 
-    INPUT_DIR  <- file.path("results/metrics", TERRITORY)
+    MAIN_DIR  <- file.path("results/metrics", TERRITORY)
+    COMP_DIR <- file.path("results/metrics", "complementary")
     OUTPUT_DIR <- file.path("results/plots",   TERRITORY, glue(TERRITORY, '_', LANG))
     if (!dir.exists(OUTPUT_DIR)) dir.create(OUTPUT_DIR, recursive = TRUE)
 
     ### 3.1 Load main deforestation CSV ----
     # ----------------------------------------------------------------------- - - -
     main_csv <- list.files(
-      INPUT_DIR,
+      MAIN_DIR,
       pattern = glue("^{TERRITORY}_deforestation_.*\\.csv$"),
       full.names = TRUE, ignore.case = TRUE
     )
     if (length(main_csv) == 0) {
-      message(glue("⚠ CSV not found for {TERRITORY} in {INPUT_DIR} — skipping."))
+      message(glue("⚠ CSV not found for {TERRITORY} in {MAIN_DIR} — skipping."))
       next
     }
     message(glue("📊 Loading: {basename(main_csv[1])}"))
@@ -260,11 +296,60 @@ for (LANG in LANGS) {
       select(year, source_used, area_ha) %>%
       arrange(year, source_used)
 
-    ### 3.2 IDEAM integration (Guaviare only) ----
+    ### 3.2 INPE/PRODES override (Cotriguacu & Paragominas) ----
+    # ----------------------------------------------------------------------- - - -
+    is_cp <- tolower(TERRITORY) %in% c("cotriguacu", "paragominas")
+    if (is_cp) {
+      prodes_file <- file.path(COMP_DIR, glue("{TERRITORY}_deforestation_prodes_2001_2022.csv"))
+      prodes_off  <- read_prodes_official(prodes_file)
+      if (!is.null(prodes_off)) {
+        prodes_off <- prodes_off %>%
+          filter(dplyr::between(year, 2001L, 2022L)) %>%
+          mutate(source_used = "INPE")
+        # remove série INPE do GEE nesses anos e substitui pela oficial
+        long_main <- long_main %>%
+          filter(!(source_used == "INPE" & dplyr::between(year, 2001L, 2022L))) %>%
+          bind_rows(prodes_off)
+        message(glue("🔗 INPE/PRODES: override 2001-2022 com {basename(prodes_file)} (km²→ha)."))
+      } else {
+        message("ℹ INPE/PRODES: arquivo não encontrado/parsable — mantendo série do GEE.")
+      }
+    }
+    
+  ### 3.3 MapBiomas (site oficial) override (Cotriguacu & Paragominas) ----
+  # ----------------------------------------------------------------------- - - -
+  if (is_cp) {
+    mb_site_file <- file.path(COMP_DIR, glue("{TERRITORY}_deforestation_mb_site_1985_2024.csv"))
+    mb_site <- read_mb_site(mb_site_file)
+    if (!is.null(mb_site)) {
+      mb_site <- mb_site %>%
+        filter(dplyr::between(year, 1985L, 2024L)) %>%
+        mutate(source_used = "MapBiomas")
+      # remove MapBiomas do GEE e substitui pela série oficial do site (1985-2024)
+      long_main <- long_main %>%
+        filter(source_used != "MapBiomas") %>%
+        bind_rows(mb_site)
+      message(glue("🔗 MapBiomas (site): override 1985-2024 com {basename(mb_site_file)}."))
+    } else {
+      message("ℹ MapBiomas (site): arquivo não encontrado/parsable — mantendo série do GEE.")
+    }
+  }
+
+  if (is_cp && !is.null(mb_site)) {
+    message("MB-site tail: ",
+      mb_site %>% filter(year >= 2020) %>%
+        arrange(year) %>%
+        mutate(area_ha = round(area_ha, 2)) %>%
+        transmute(pair = paste0(year, ":", area_ha)) %>%
+        pull(pair) %>% paste(collapse = ", ")
+    )
+  }
+    
+    ### 3.4 IDEAM integration (Guaviare only) ----
     # ----------------------------------------------------------------------- - - -
     if (tolower(TERRITORY) == "guaviare") {
       ideam_csv <- list.files(
-        INPUT_DIR,
+        COMP_DIR,
         pattern = glue("^{TERRITORY}.*deforestation_ideam.*\\.csv$"),
         full.names = TRUE, ignore.case = TRUE
       )
@@ -289,12 +374,28 @@ for (LANG in LANGS) {
       }
     }
 
-    ### 3.3 Filter, type-cast, and validate ----
+    ### 3.5 Filter, type-cast, and validate ----
     # ----------------------------------------------------------------------- - - -
     # Coverage years per source 
-    YEAR_MIN <- c(`JRC-TMF` = 1990L, MapBiomas = 1990L, INPE = 2008L, IDEAM = 2012L)
-    YEAR_MAX <- c(`JRC-TMF` = 2024L, MapBiomas = 2023L, INPE = 2024L, IDEAM = 2023L)
-    
+    if (tolower(TERRITORY) %in% c("cotriguacu","paragominas")) {
+      # INPE from 2001
+      YEAR_MIN <- c(`JRC-TMF` = 1990L, MapBiomas = 1990L, INPE = 2001L)
+      YEAR_MAX <- c(`JRC-TMF` = 2024L, MapBiomas = 2024L, INPE = 2024L)
+    } else if (tolower(TERRITORY) == "guaviare") {
+      # IDEAM from 2012
+      YEAR_MIN <- c(`JRC-TMF` = 1990L, MapBiomas = 1990L, IDEAM = 2012L)
+      YEAR_MAX <- c(`JRC-TMF` = 2024L, MapBiomas = 2023L, IDEAM = 2023L)
+    } else if (tolower(TERRITORY) == "madre_de_dios") {
+      # No INPE or IDEAM
+      YEAR_MIN <- c(`JRC-TMF` = 1990L, MapBiomas = 1990L)
+      YEAR_MAX <- c(`JRC-TMF` = 2024L, MapBiomas = 2023L)
+    } else {
+      message(glue("⚠ Unknown territory '{TERRITORY}' for year coverage — skipping."))
+      next
+    }
+
+    message(glue("✓ Year coverage per source: {paste(names(YEAR_MIN), YEAR_MIN, sep='=', collapse=', ')}"))
+   
     expected <- expected_sources(TERRITORY)
 
     df_long <- long_main %>%
@@ -304,15 +405,12 @@ for (LANG in LANGS) {
         year        = as.integer(year),
         area_ha     = pmax(suppressWarnings(as.numeric(area_ha)), 0)
       ) %>%
-      # >>> enforce source coverage to avoid spurious 2024 for MapBiomas <<<
+      # aplica limites por fonte (evita MapBiomas-2024 indevido em ROIs sem site)
       filter(
         year >= YEAR_MIN[as.character(source_used)],
         year <= YEAR_MAX[as.character(source_used)]
       ) %>%
-      arrange(year, source_used)
-
-    # Trim leading zeros to avoid a flat line at zero
-    df_long <- df_long %>%
+      arrange(year, source_used) %>%
       group_by(source_used) %>%
       arrange(year, .by_group = TRUE) %>%
       mutate(area_ha = trim_leading_zeros(area_ha)) %>%
@@ -330,7 +428,7 @@ for (LANG in LANGS) {
     year_min <- min(df_long$year, na.rm = TRUE)
     year_max <- max(df_long$year, na.rm = TRUE)
     message(glue("✓ Sources present: {paste(present_sources, collapse=', ')}"))
-    message(glue("✓ Year range: {year_min}–{year_max} (n={nrow(df_long)})"))
+    message(glue("✓ Year range: {year_min}-{year_max} (n={nrow(df_long)})"))
 
     # Defensive subset for plotting
     df_plot <- df_long %>% filter(!is.na(area_ha)) %>% droplevels()
@@ -342,7 +440,7 @@ for (LANG in LANGS) {
     territory_title <- TERRITORY_LABELS[[TERRITORY]]
     present_sources <- levels(df_plot$source_used)
 
-    ### 3.4 Plot ----
+    ### 3.6 Plot ----
     # ----------------------------------------------------------------------- - - -
     p <- ggplot(df_plot, aes(x = year, y = area_ha, color = source_used, linetype = source_used)) +
       geom_line(linewidth = 1.2, lineend = "round", na.rm = TRUE) +
@@ -356,14 +454,14 @@ for (LANG in LANGS) {
         title   = label("title_deforestation_in", territory = territory_title),
         x       = label("x_year"),
         y       = label("y_area_ha"),
-        caption = caption_for(TERRITORY, present_sources, LANG)
+        caption = caption_for(df_plot, LANG)
       ) +
       theme_time_series()
 
     print(p)
     message(glue("✓ Plot generated for {TERRITORY}"))
 
-    ### 3.5 Export (fixed full-page size) ----
+    ### 3.7 Export (fixed full-page size) ----
     # ----------------------------------------------------------------------- - - -
     if (WRITE_PLOT) {
       file_stub <- glue("01_{TERRITORY}_deforestation_{LANG}")
@@ -387,9 +485,9 @@ for (LANG in LANGS) {
       }
 
       message("✅ Saved:")
-      message(glue("   PNG: {basename(png_path)}  ({FIG_WIDTH_MM}×{FIG_HEIGHT_MM} mm)"))
+      message(glue("   PNG: {basename(png_path)}  ({FIG_WIDTH_MM}X{FIG_HEIGHT_MM} mm)"))
       if (isTRUE(WRITE_SVG)) {
-        message(glue("   SVG: {basename(svg_path)}  ({FIG_WIDTH_MM}×{FIG_HEIGHT_MM} mm)"))
+        message(glue("   SVG: {basename(svg_path)}  ({FIG_WIDTH_MM}X{FIG_HEIGHT_MM} mm)"))
       } else {
         message("   SVG: (skipped)")
       }

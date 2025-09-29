@@ -15,14 +15,14 @@ import os
 
 # GDAL calc script path
 # Update this path to match your GDAL installation
-gdal_calc_path = r"C:\Users\caslu\miniforge3\envs\pygeo\Scripts\gdal_calc.py"
+gdal_calc_path = r"C:\Users\lpereira\AppData\Local\miniforge3\envs\pygeo\Scripts\gdal_calc.py"
 
 #===============================================================================
 # 2. PATHS
 #===============================================================================
 # Define the data folder and input raster path
-data_folder = "data/raster/mspa_2024/"
-input_raster  = os.path.join(data_folder, "forest_mask_binary_eqearth.tif")
+data_folder = "UE1001_StageM2/data/vegetation/veg3_gwb_mspa_2019"
+input_raster  = os.path.join(data_folder, "veg3_binary_eqearth.tif")
 
 # Ensure the input raster path is correct
 if not os.path.exists(input_raster):
@@ -30,7 +30,7 @@ if not os.path.exists(input_raster):
 print(f"Input raster found: {input_raster}")
 
 # Output raster path and GDAL calc script path
-output_raster = os.path.join(data_folder, "forest_mask_recode_mspa.tif")
+output_raster = os.path.join(data_folder, "veg3_recode_mspa.tif")
 
 #===============================================================================
 # 3. RECODE RASTER TO MSPA FORMAT
@@ -56,5 +56,14 @@ print("Recoding complete.")
 # 4. CLEAN OVERVIEWS (REQUIRED FOR GWB)
 #===============================================================================
 print("Cleaning overviews...")
-subprocess.run(["gdaladdo", "-clean", output_raster], check=True)
-print("Overviews cleaned. Raster is ready for GWB/MSPA.")
+
+# Use absolute path to gdaladdo.exe (avoid PATH issues)
+gdaladdo_path = r"C:\Users\caslu\miniforge3\envs\pygeo\Library\bin\gdaladdo.exe"
+
+try:
+    subprocess.run([gdaladdo_path, "-clean", output_raster], check=True)
+    print("Overviews cleaned. Raster is ready for GWB/MSPA.")
+except Exception as e:
+    print(f"Warning: could not run gdaladdo ({e}). Skipping overview cleaning.")
+
+print(f"Final recoded raster saved to: {output_raster}")

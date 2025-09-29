@@ -4,6 +4,7 @@
 #                                                                               #
 ##%###########################################################################%##
 
+
 # 1) Configuration ----
 # ------------------------------------------------------------------------- - - -
 suppressPackageStartupMessages({
@@ -43,7 +44,7 @@ DPI           <- 300
 
 # Year trimming for plotting (e.g., drop 1990 and the last 2 uncertain years)
 DROP_FIRST_YEARS <- 1   # drops 1990
-DROP_LAST_YEARS  <- 2   # drops 2023–2024
+DROP_LAST_YEARS  <- 2   # drops 2023-2024
 
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
@@ -75,10 +76,14 @@ label <- function(key, ...) {
 
 ## 1.3 Palette for source (line) ----
 # ------------------------------------------------------------------------- - - -
-# Single source (TMF). Color distinct from degradation.
-source_line_colors <- c(`TMF-JRC` = "#caa640ff")
-source_line_types  <- c(`TMF-JRC` = "solid")
-
+source_line_colors <- c(
+  `TMF-JRC`  = "#b3dc21ff",
+  MapBiomas  = "#1f77b4"
+)
+source_line_types  <- c(
+  `TMF-JRC`  = "solid",
+  MapBiomas  = "solid"
+)
 ## 1.4 Theme & scales ----
 # ------------------------------------------------------------------------- - - -
 theme_time_series <- function() {
@@ -120,7 +125,7 @@ axis_x_years_all <- function(year_min, year_max) {
 #     step_candidates <- c(100, 200, 250, 500, 1000, 2000)  # < 2.5k ha
 #     label_acc <- 0.1  # mostra 0.1, 0.2, ... mil ha
 #   } else if (ymax <= 7000) {
-#     step_candidates <- c(500, 1000, 2000, 2500, 5000)     # 2.5k–7k ha
+#     step_candidates <- c(500, 1000, 2000, 2500, 5000)     # 2.5k-7k ha
 #     label_acc <- 0.5
 #   } else {
 #     step_candidates <- c(1000, 2000, 5000, 10000, 20000, 50000)  # > 7k ha
@@ -146,7 +151,7 @@ axis_y_ha_auto <- function(y_max_raw) {
   if (!is.finite(ymax) || ymax <= 0) ymax <- 10000
 
   # Clean steps: 5k, 10k, 20k, 50k, 100k, 200k, 500k, 1M…
-  steps <- c(5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000)
+  steps <- c(50, 500, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000)
   target_n <- 6
   step <- steps[ which.min(abs((ceiling(ymax/steps)+1) - target_n)) ]
   ymax <- ceiling(ymax/step)*step
@@ -166,31 +171,51 @@ axis_y_ha_auto <- function(y_max_raw) {
 ##%###########################################################################%##
 
 ## 2.1 Map CSV column names to TMF (regrowth) ----
-# Robust mapping: accepts *area_ha* with "tmf" and any regrowth-like token.
-map_col_to_tmf_regrowth <- function(colname) {
+# ------------------------------------------------------------------------- - - -
+map_col_to_source_regrowth <- function(colname) {
   z <- tolower(colname)
   is_area <- str_detect(z, "area_ha")
-  has_tmf <- str_detect(z, "tmf")
-  has_reg <- str_detect(z, "regrow|regen|regener|recovery|reveg|reforest")
-  if (is_area && (has_tmf || has_reg)) return("TMF-JRC")
-  if (is_area) return("TMF-JRC")  # fallback for TMF-only CSVs
+  if (!is_area) return(NA_character_)
+  if (str_detect(z, "tmf")) return("TMF-JRC")
+  if (str_detect(z, "mb")  || str_detect(z, "mapbiomas")) return("MapBiomas")
   NA_character_
 }
 
+## 2.2 Read MapBiomas regrowth CSV (if needed) ----
+# ------------------------------------------------------------------------- - - -
+read_mb_site_regrowth <- function(path) {
+  if (!file.exists(path)) return(NULL)
+  loc <- readr::locale(decimal_mark = ",", grouping_mark = ".", encoding = "UTF-8")
+  df  <- readr::read_csv(path, show_col_types = FALSE, locale = loc)
+  # detecta coluna Ano e a coluna de valores
+  year_col <- names(df)[stringr::str_detect(tolower(names(df)), "^(ano|year)$")]
+  if (length(year_col) == 0) return(NULL)
+  val_col  <- setdiff(names(df), year_col)[1]
+  out <- df %>%
+    dplyr::rename(year = all_of(year_col), val_raw = all_of(val_col)) %>%
+    dplyr::mutate(
+      val_raw = dplyr::na_if(stringr::str_trim(as.character(val_raw)), "-"),
+      area_ha = readr::parse_number(val_raw, locale = loc)
+    ) %>%
+    dplyr::mutate(area_ha = tidyr::replace_na(area_ha, 0)) %>%
+    dplyr::transmute(year = as.integer(year), area_ha = as.numeric(area_ha)) %>%
+    dplyr::filter(!is.na(year))
+  if (nrow(out) == 0) return(NULL)
+  out
+}
+
 ## 2.2 Caption (TMF coverage + shown range) ----
-caption_tmf <- function(lang = "fr", source_span = "1990–2024",
-                        shown_min = NULL, shown_max = NULL) {
-  prefix <- switch(lang, "fr"="Sources — ", "pt"="Fontes — ",
-                         "es"="Fuentes — ", "en"="Sources — ", "Sources — ")
-  shown  <- if (!is.null(shown_min) && !is.null(shown_max)) {
-    switch(lang,
-      "fr" = glue::glue(" • Plage affichée : {shown_min}–{shown_max}"),
-      "pt" = glue::glue(" • Faixa exibida: {shown_min}–{shown_max}"),
-      "es" = glue::glue(" • Intervalo mostrado: {shown_min}–{shown_max}"),
-      "en" = glue::glue(" • Range shown: {shown_min}–{shown_max}")
-    )
-  } else ""
-  paste0(prefix, "TMF-JRC: ", source_span, shown)
+# ------------------------------------------------------------------------- - - -
+caption_sources <- function(df_in, lang = "fr") {
+  if (is.null(df_in) || nrow(df_in) == 0) return("")
+  cov <- df_in %>%
+    dplyr::filter(!is.na(year), !is.na(area_ha)) %>%
+    dplyr::group_by(source_used) %>%
+    dplyr::summarise(miny = min(year), maxy = max(year), .groups = "drop") %>%
+    dplyr::arrange(factor(source_used, levels = c("TMF-JRC","MapBiomas")))
+  cov_str <- paste0(cov$source_used, ": ", cov$miny, "–", cov$maxy, collapse = " | ")
+  prefix <- switch(lang, "fr"="Sources — ", "pt"="Fontes — ", "es"="Fuentes — ", "en"="Sources — ", "Sources — ")
+  paste0(prefix, cov_str)
 }
 
 ## 2.3 Trim leading zeros (optional cosmetic) ----
@@ -217,19 +242,20 @@ for (LANG in LANGS) {
     cat(glue("PROCESSING: {toupper(TERRITORY)}"))
     cat("\n", paste(rep("=", 64), collapse=""), "\n", sep = "")
 
-    INPUT_DIR  <- file.path("results/metrics", TERRITORY)
+    MAIN_DIR  <- file.path("results/metrics", TERRITORY)
+    COMP_DIR <- file.path("results/metrics", "complementary")
     OUTPUT_DIR <- file.path("results/plots", TERRITORY, glue("{TERRITORY}_{LANG}"))
     if (!dir.exists(OUTPUT_DIR)) dir.create(OUTPUT_DIR, recursive = TRUE)
 
     ### 3.1 Load regrowth CSV (TMF-only) ----
     # ----------------------------------------------------------------------- - - -
     main_csv <- list.files(
-      INPUT_DIR,
-      pattern = glue("^{TERRITORY}_regrowth_.*\\.csv$"),
+      MAIN_DIR,
+      pattern = glue("^{TERRITORY}_regrowth_tmf_mb_.*\\.csv$"),
       full.names = TRUE, ignore.case = TRUE
     )
     if (length(main_csv) == 0) {
-      message(glue("⚠ CSV not found for {TERRITORY} in {INPUT_DIR} — skipping."))
+      message(glue("⚠ CSV not found for {TERRITORY} in {MAIN_DIR} — skipping."))
       next
     }
     message(glue("📊 Loading: {basename(main_csv[1])}"))
@@ -256,48 +282,78 @@ for (LANG in LANGS) {
 
     # Long format with TMF-only mapping
     long_main <- df %>%
-      select(all_of(c(year_col, area_cols))) %>%
-      pivot_longer(cols = all_of(area_cols), names_to = "var", values_to = "area_ha") %>%
-      mutate(
-        source_used = vapply(var, map_col_to_tmf_regrowth, character(1)),
+      dplyr::select(all_of(c(year_col, area_cols))) %>%
+      tidyr::pivot_longer(cols = all_of(area_cols), names_to = "var", values_to = "area_ha") %>%
+      dplyr::mutate(
+        source_used = vapply(var, map_col_to_source_regrowth, character(1)),
         year        = as.integer(.data[[year_col]]),
         area_ha     = suppressWarnings(as.numeric(area_ha))
       ) %>%
-      filter(!is.na(source_used), !is.na(year), !is.na(area_ha)) %>%
-      select(year, source_used, area_ha) %>%
-      arrange(year, source_used)
+      dplyr::filter(!is.na(source_used), !is.na(year), !is.na(area_ha)) %>%
+      dplyr::select(year, source_used, area_ha) %>%
+      dplyr::arrange(year, source_used)
+
+    is_cp <- tolower(TERRITORY) %in% c("cotriguacu","paragominas")
+    if (is_cp) {
+      mb_site_file <- file.path(COMP_DIR, glue("{TERRITORY}_regrowth_mb_site_1985_2024.csv"))
+      mb_site <- read_mb_site_regrowth(mb_site_file)
+      if (!is.null(mb_site)) {
+        # mantém só TMF do principal e troca o MB pelo do site (cortando <1990)
+        long_main <- long_main %>%
+          dplyr::filter(source_used != "MapBiomas") %>%
+          dplyr::bind_rows(
+            mb_site %>%
+              dplyr::filter(dplyr::between(year, 1990L, 2024L)) %>%
+              dplyr::mutate(source_used = "MapBiomas")
+          )
+        message(glue("🔗 MapBiomas (site) regrowth override: {basename(mb_site_file)}"))
+      } else {
+        message("ℹ MB site regrowth: arquivo não encontrado/parsable — mantendo MB do CSV principal (se houver).")
+      }
+    }
 
     ### 3.2 Filter, cast, and validate ----
     # ----------------------------------------------------------------------- - - -
+    if (is_cp) {
+      YEAR_MIN <- c(`TMF-JRC` = 1990L, MapBiomas = 1990L)  # corta MB < 1990
+      YEAR_MAX <- c(`TMF-JRC` = 2024L, MapBiomas = 2024L)
+    } else {
+      YEAR_MIN <- c(`TMF-JRC` = 1990L, MapBiomas = 1990L)
+      YEAR_MAX <- c(`TMF-JRC` = 2024L, MapBiomas = 2024L)
+    }
+
     df_long <- long_main %>%
-      mutate(
-        source_used = factor(source_used, levels = "TMF-JRC"),
+      dplyr::mutate(
+        source_used = factor(source_used, levels = c("TMF-JRC","MapBiomas")),
         year        = as.integer(year),
         area_ha     = pmax(suppressWarnings(as.numeric(area_ha)), 0)
       ) %>%
-      arrange(year, source_used) %>%
-      group_by(source_used) %>%
-      mutate(area_ha = trim_leading_zeros(area_ha)) %>%
-      ungroup()
+      dplyr::filter(
+        year >= YEAR_MIN[as.character(source_used)],
+        year <= YEAR_MAX[as.character(source_used)]
+      ) %>%
+      dplyr::arrange(year, source_used) %>%
+      dplyr::group_by(source_used) %>%
+      dplyr::mutate(area_ha = trim_leading_zeros(area_ha)) %>%
+      dplyr::ungroup()
 
     if (nrow(df_long) == 0) {
       message("⚠ No rows after filtering/mapping — skipping.")
       next
     }
 
-    present_sources <- levels(droplevels(df_long$source_used))  # "JRC-TMF"
+    present_sources <- levels(droplevels(df_long$source_used))
     cols <- source_line_colors[present_sources]
     ltys <- source_line_types[present_sources]
     year_min <- min(df_long$year, na.rm = TRUE)
     year_max <- max(df_long$year, na.rm = TRUE)
 
-    # Determine plotting window after configured drops
+    # plotting window
     plot_min <- year_min + DROP_FIRST_YEARS
     plot_max <- year_max - DROP_LAST_YEARS
 
-    # Apply plotting window filter
     df_plot <- df_long %>%
-      filter(!is.na(area_ha), dplyr::between(year, plot_min, plot_max)) %>%
+      dplyr::filter(!is.na(area_ha), dplyr::between(year, plot_min, plot_max)) %>%
       droplevels()
 
     if (nrow(df_plot) == 0) {
@@ -321,7 +377,7 @@ for (LANG in LANGS) {
         title   = label("title_regrowth_in", territory = territory_title),
         x       = label("x_year"),
         y       = label("y_area_ha"),
-        caption = caption_tmf(LANG, shown_min = plot_min, shown_max = plot_max)
+        caption = caption_sources(df_plot, LANG)
       ) +
       theme_time_series()
 
