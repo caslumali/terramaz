@@ -22,6 +22,7 @@ suppressPackageStartupMessages({
 # ------------------------------------------------------------------------- - - -
 WRITE_PLOT    <- TRUE
 WRITE_SVG     <- FALSE
+
 # TERRITORIES <- c("guaviare")  # quick test
 TERRITORIES   <- c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
 
@@ -32,8 +33,8 @@ TERRITORY_LABELS <- c(
   madre_de_dios = "Madre de Dios"
 )
 
-# Output file parameters (FIXED full-page size for A4 PDFs)
-FILENAME_STUB    <- "deforestation_ts"
+# Output file parameters
+FILENAME_STUB    <- "01_{territory}_deforestation_{lang}"
 FIG_WIDTH_MM     <- 431.8   # 17 in — full page width
 FIG_HEIGHT_MM    <- 152.4   # 6 in  — consistent with fire plots
 UNITS            <- "mm"
@@ -248,7 +249,7 @@ for (LANG in LANGS) {
 
     MAIN_DIR  <- file.path("results/metrics", TERRITORY)
     COMP_DIR <- file.path("results/metrics", "complementary")
-    OUTPUT_DIR <- file.path("results/plots",   TERRITORY, glue(TERRITORY, '_', LANG))
+    OUTPUT_DIR <- file.path("results/indicators",   TERRITORY, glue(TERRITORY, '_', LANG))
     if (!dir.exists(OUTPUT_DIR)) dir.create(OUTPUT_DIR, recursive = TRUE)
 
     ### 3.1 Load main deforestation CSV ----
@@ -464,7 +465,7 @@ for (LANG in LANGS) {
     ### 3.7 Export (fixed full-page size) ----
     # ----------------------------------------------------------------------- - - -
     if (WRITE_PLOT) {
-      file_stub <- glue("01_{TERRITORY}_deforestation_{LANG}")
+      file_stub <- glue(FILENAME_STUB, territory = TERRITORY, lang = LANG)
       png_path  <- file.path(OUTPUT_DIR, glue("{file_stub}.png"))
 
       # PNG 

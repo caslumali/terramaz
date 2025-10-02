@@ -78,12 +78,12 @@ TERRITORY_LABELS <- c(
   madre_de_dios = "Madre de Dios"
 )
 
-# Output figure specs (A4-width style, like your other figures)
-FILENAME_STUB <- "transition_tmf_mb"
-FIG_WIDTH_MM  <- 431.8  # 17 in
-FIG_HEIGHT_MM <- 228.6  # 9 in
-UNITS         <- "mm"
-DPI           <- 300
+# Output figure specs
+FILENAME_SANKEY <- "05_{territory}_sankey_{stage_tag}_{lang}"
+FIG_WIDTH_MM    <- 431.8  # 17 in
+FIG_HEIGHT_MM   <- 228.6  # 9 in
+UNITS           <- "mm"
+DPI             <- 300
 
 # MapBiomas year window (Collection 6 for Amazônia)
 MB_YEAR_MIN <- 1986L
@@ -565,7 +565,7 @@ make_sankey_mb <- function(
   stayers       = STAYERS_DEFAULT,
   width_mm      = FIG_WIDTH_MM,
   height_mm     = FIG_HEIGHT_MM,
-  out_dir       = "results/plots",
+  out_dir       = "results/indicators",
   csv_long_path = NULL,
   drop_classes  = DROP_CLASSES,
   keep_classes  = KEEP_CLASSES,
@@ -746,8 +746,9 @@ make_sankey_mb <- function(
   if (!dir.exists(out_base)) dir.create(out_base, recursive = TRUE)
   # tag <- if (stayers) "withStayers" else "noStayers"
   stage_tag <- if (n_stages == 4L) "4stages" else "3stages"
-  file_stub <- glue("05a_{territory}_sankey_mb_{stage_tag}_{lang}")
-
+  
+  file_stub <- glue(FILENAME_SANKEY, territory = territory, stage_tag = stage_tag, lang = lang)
+  
   if (isTRUE(WRITE_PLOT)) {
     png_path <- file.path(out_base, glue("{file_stub}.png"))
     ggsave(png_path, plot = p, width = width_mm, height = height_mm, units = UNITS,

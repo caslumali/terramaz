@@ -37,8 +37,8 @@ TERRITORY_LABELS <- c(
   madre_de_dios = "Madre de Dios"
 )
 
-# Fixed full-page export size (A4-width figures in your layout)
-FILENAME_STUB <- "burned_ts"
+# Fixed full-page export size
+FILENAME_FIRE <- "04_{territory}_burned_fo_nf_facet_{lang}"
 FIG_WIDTH_MM  <- 431.8   # 17 in — full page width
 FIG_HEIGHT_MM <- 320
 UNITS         <- "mm"
@@ -74,19 +74,29 @@ LABELS <- list(
   # Legend texts for each panel (FO and NF)
   legend_fo = c(
     fr = "Surface brûlée en forêt",
-    es = "Área quemada en bosque",
-    pt = "Área queimada na floresta",
-    en = "Burned area in forest"
+    es = "Área de bosque incendiada",
+    pt = "Área de floresta queimada",
+    en = "Burned forest area"
   ),
   legend_nf = c(
     fr = "Surface brûlée hors forêt",
-    es = "Área quemada fuera del bosque",
+    es = "Área incendiada fuera del bosque",
     pt = "Área queimada fora da floresta",
-    en = "Burned area outside forest"
+    en = "Burned non-forest area"
   ),
-
-  panel_fo = c(fr = "Forêt brûlée",      pt = "Floresta queimada",     es = "Bosque quemado",     en = "Burned forest"),
-  panel_nf = c(fr = "Non-forêt brûlée",  pt = "Não-floresta queimada", es = "No bosque quemado", en = "Burned non-forest")
+  # Panel titles
+  panel_fo = c(
+    fr = "Forêt brûlée",
+    pt = "Floresta queimada",
+    es = "Bosque incendiado",
+    en = "Burned forest"
+  ),
+  panel_nf = c(
+    fr = "Non-forêt brûlée",
+    pt = "Não-floresta queimada",
+    es = "Área no boscosa incendiada",
+    en = "Burned non-forest"
+  )
 )
 
 # Helper to resolve translated strings with glue()
@@ -290,7 +300,7 @@ for (LANG in LANGS) {
 
     INPUT_DIR  <- file.path("results/metrics", TERRITORY)
     # Output in a territory/lang subfolder to help partners find assets easily
-    OUTPUT_DIR <- file.path("results/plots", TERRITORY, glue("{TERRITORY}_{LANG}"))
+    OUTPUT_DIR <- file.path("results/indicators",   TERRITORY, glue(TERRITORY, '_', LANG))
     if (!dir.exists(OUTPUT_DIR)) dir.create(OUTPUT_DIR, recursive = TRUE)
 
     ### 3.1 Load burned CSV ----
@@ -463,7 +473,7 @@ for (LANG in LANGS) {
     ### 3.4 Export (fixed full-page size) ----
     # ----------------------------------------------------------------------- - - -
     if (WRITE_PLOT) {
-      file_stub <- glue("04_{TERRITORY}_burned_fo_nf_{LANG}")
+      file_stub <- glue(FILENAME_FIRE, territory = TERRITORY, lang = LANG)
 
       # PNG
       png_path <- file.path(OUTPUT_DIR, glue("{file_stub}.png"))
@@ -484,9 +494,9 @@ for (LANG in LANGS) {
       }
 
       message("✅ Saved:")
-      message(glue("   PNG: {basename(png_path)}  ({FIG_WIDTH_MM}×{FIG_HEIGHT_MM} mm)"))
+      message(glue("   PNG: {basename(png_path)}  ({FIG_WIDTH_MM}x{FIG_HEIGHT_MM} mm)"))
       if (isTRUE(WRITE_SVG)) {
-        message(glue("   SVG: {basename(svg_path)}  ({FIG_WIDTH_MM}×{FIG_HEIGHT_MM} mm)"))
+        message(glue("   SVG: {basename(svg_path)}  ({FIG_WIDTH_MM}x{FIG_HEIGHT_MM} mm)"))
       } else {
         message("   SVG: (skipped)")
       }

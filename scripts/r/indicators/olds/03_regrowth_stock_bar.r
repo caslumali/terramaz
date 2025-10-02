@@ -1,7 +1,7 @@
 ##%###########################################################################%##
 #                                                                               #
-#                         Regrowth Time Series (TMF-only)                    ----
-#                                                                               #
+#                   Forest Regrowth (stock) - TMF & Mabpbiomas                ----
+#                               Accumulated Area                                #
 ##%###########################################################################%##
 
 
@@ -24,6 +24,12 @@ suppressPackageStartupMessages({
 WRITE_PLOT <- TRUE
 WRITE_SVG  <- FALSE
 
+# Choose the datasets
+# "tmf_mb" → shows TMF + MapBiomas 
+# "tmf"    → shows just TMF
+# "mb"     → shows just MapBiomas
+DATASET_MODE <- "mb"  
+
 # Territories to process
 # TERRITORIES <- c("cotriguacu")  # quick test
 TERRITORIES <- c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
@@ -36,15 +42,14 @@ TERRITORY_LABELS <- c(
 )
 
 # Fixed full-page figure size (A4 width) to match other figures
-FILENAME_STUB <- "regrowth_ts"
 FIG_WIDTH_MM  <- 431.8   # 17 in — full page width
 FIG_HEIGHT_MM <- 152.4   # 6 in  — consistent height
 UNITS         <- "mm"
 DPI           <- 300
 
-# Year trimming for plotting (e.g., drop 1990 and the last 2 uncertain years)
-DROP_FIRST_YEARS <- 1   # drops 1990
-DROP_LAST_YEARS  <- 2   # drops 2023-2024
+# Plot window (keep full axis to show NODATA years)
+PLOT_YEAR_MIN <- 1990L
+PLOT_YEAR_MAX <- 2023L
 
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
@@ -52,11 +57,11 @@ LANGS <- c("fr")  # "pt" | "es" | "fr" | "en"
 
 LABELS <- list(
   # Titles
-  title_regrowth_in = c(
-    fr = "Évolution annuelle de la régénération à {territory}",
-    es = "Evolución anual de la regeneración en {territory}",
-    pt = "Evolução anual da regeneração em {territory}",
-    en = "Annual evolution of regrowth in {territory}"
+  title_regrowth_stock = c(
+    fr = "Surface accumulée des forêts secondaires à {territory}",
+    es = "Superficie acumulada de bosques secundarios en {territory}",
+    pt = "Superfície acumulada de florestas secundárias em {territory}",
+    en = "Accumulated area of secondary forests in {territory}"
   ),
   # Axes
   x_year = c(fr = "Année", pt = "Ano", es = "Año", en = "Year"),
@@ -86,7 +91,7 @@ source_line_types  <- c(
 )
 ## 1.4 Theme & scales ----
 # ------------------------------------------------------------------------- - - -
-theme_time_series <- function() {
+theme_bar_series <- function() {
   theme_minimal(base_size = 13) +
     theme(
       plot.title.position = "plot",
@@ -103,7 +108,8 @@ theme_time_series <- function() {
       legend.direction    = "horizontal",
       legend.title        = element_blank(),
       legend.text         = element_text(size = 12),
-      legend.key.size     = unit(2.5, "lines"),
+      legend.key.width    = unit(0.9, "cm"),
+      legend.key.height   = unit(0.3, "cm"),
       plot.margin         = margin(12, 12, 12, 12),
       plot.caption        = element_text(hjust = 1, size = 10, color = "gray30", margin = margin(t = 12))
     )
@@ -115,35 +121,6 @@ axis_x_years_all <- function(year_min, year_max) {
     expand = expansion(mult = c(0.01, 0.02))
   )
 }
-
-# axis_y_thousands_auto <- function(y_max_raw) {
-#   ymax <- max(0, as.numeric(y_max_raw))
-#   if (!is.finite(ymax) || ymax <= 0) ymax <- 1000
-
-#   # Escolhe a família de steps conforme o tamanho da série
-#   if (ymax <= 2500) {
-#     step_candidates <- c(100, 200, 250, 500, 1000, 2000)  # < 2.5k ha
-#     label_acc <- 0.1  # mostra 0.1, 0.2, ... mil ha
-#   } else if (ymax <= 7000) {
-#     step_candidates <- c(500, 1000, 2000, 2500, 5000)     # 2.5k-7k ha
-#     label_acc <- 0.5
-#   } else {
-#     step_candidates <- c(1000, 2000, 5000, 10000, 20000, 50000)  # > 7k ha
-#     label_acc <- 1
-#   }
-
-#   target_n <- 7
-#   n_breaks <- ceiling(ymax / step_candidates) + 1
-#   step <- step_candidates[ which.min(abs(n_breaks - target_n)) ]
-#   ymax <- ceiling(ymax / step) * step
-
-#   ggplot2::scale_y_continuous(
-#     breaks = seq(0, ymax, by = step),
-#     labels = function(v) scales::number(v / 1000, accuracy = label_acc, big.mark = " "),
-#     limits = c(0, ymax),
-#     expand = expansion(mult = c(0.03, 0.03))  # margem para não “cortar” perto do zero
-#   )
-# }
 
 # Pretty Y axis in full hectares (no scientific, nice thousands separators)
 axis_y_ha_auto <- function(y_max_raw) {
@@ -213,7 +190,7 @@ caption_sources <- function(df_in, lang = "fr") {
     dplyr::group_by(source_used) %>%
     dplyr::summarise(miny = min(year), maxy = max(year), .groups = "drop") %>%
     dplyr::arrange(factor(source_used, levels = c("TMF-JRC","MapBiomas")))
-  cov_str <- paste0(cov$source_used, ": ", cov$miny, "–", cov$maxy, collapse = " | ")
+  cov_str <- paste0(cov$source_used, ": ", cov$miny, "-", cov$maxy, collapse = " | ")
   prefix <- switch(lang, "fr"="Sources — ", "pt"="Fontes — ", "es"="Fuentes — ", "en"="Sources — ", "Sources — ")
   paste0(prefix, cov_str)
 }
@@ -230,7 +207,7 @@ trim_leading_zeros <- function(y) {
 
 ##%###########################################################################%##
 #                                                                               #
-#                         3) Main Processing Loop                            ----
+#                         3) Stock processing loop                           ----
 #                                                                               #
 ##%###########################################################################%##
 
@@ -244,14 +221,14 @@ for (LANG in LANGS) {
 
     MAIN_DIR  <- file.path("results/metrics", TERRITORY)
     COMP_DIR <- file.path("results/metrics", "complementary")
-    OUTPUT_DIR <- file.path("results/plots", TERRITORY, glue("{TERRITORY}_{LANG}"))
+    OUTPUT_DIR <- file.path("results/indicators",   TERRITORY, glue(TERRITORY, '_', LANG))
     if (!dir.exists(OUTPUT_DIR)) dir.create(OUTPUT_DIR, recursive = TRUE)
 
     ### 3.1 Load regrowth CSV (TMF-only) ----
     # ----------------------------------------------------------------------- - - -
     main_csv <- list.files(
       MAIN_DIR,
-      pattern = glue("^{TERRITORY}_regrowth_tmf_mb_.*\\.csv$"),
+      pattern = glue("^{TERRITORY}_regrowth_stock_tmf_mb_.*\\.csv$"),
       full.names = TRUE, ignore.case = TRUE
     )
     if (length(main_csv) == 0) {
@@ -295,7 +272,7 @@ for (LANG in LANGS) {
 
     is_cp <- tolower(TERRITORY) %in% c("cotriguacu","paragominas")
     if (is_cp) {
-      mb_site_file <- file.path(COMP_DIR, glue("{TERRITORY}_regrowth_mb_site_1985_2024.csv"))
+      mb_site_file <- file.path(COMP_DIR, glue("{TERRITORY}_regrowth_stock_mb_site_1985_2024.csv"))
       mb_site <- read_mb_site_regrowth(mb_site_file)
       if (!is.null(mb_site)) {
         # mantém só TMF do principal e troca o MB pelo do site (cortando <1990)
@@ -312,27 +289,34 @@ for (LANG in LANGS) {
       }
     }
 
-    ### 3.2 Filter, cast, and validate ----
+  ### 3.2 Filter, cast, and validate ----
     # ----------------------------------------------------------------------- - - -
-    if (is_cp) {
-      YEAR_MIN <- c(`TMF-JRC` = 1990L, MapBiomas = 1990L)  # corta MB < 1990
-      YEAR_MAX <- c(`TMF-JRC` = 2024L, MapBiomas = 2024L)
-    } else {
-      YEAR_MIN <- c(`TMF-JRC` = 1990L, MapBiomas = 1990L)
-      YEAR_MAX <- c(`TMF-JRC` = 2024L, MapBiomas = 2024L)
-    }
+    # Valid coverage for flow:
+    # - MapBiomas events: 1990–2021 (t+2 rule → no events in 2022+)
+    # - TMF-JRC flow:     1990–2022 (mask 2023–2024 as NODATA)
+    YEAR_MIN <- c(`TMF-JRC` = 1990L, MapBiomas = 1990L)
+    YEAR_MAX <- c(`TMF-JRC` = 2022L, MapBiomas = 2023L)
 
     df_long <- long_main %>%
       dplyr::mutate(
         source_used = factor(source_used, levels = c("TMF-JRC","MapBiomas")),
         year        = as.integer(year),
-        area_ha     = pmax(suppressWarnings(as.numeric(area_ha)), 0)
+        area_ha     = suppressWarnings(as.numeric(area_ha))
       ) %>%
-      dplyr::filter(
-        year >= YEAR_MIN[as.character(source_used)],
-        year <= YEAR_MAX[as.character(source_used)]
+      # Force NODATA (NA) after valid coverage for each source
+      dplyr::mutate(
+        area_ha = dplyr::case_when(
+          source_used == "MapBiomas" & year > YEAR_MAX["MapBiomas"] ~ NA_real_,
+          source_used == "TMF-JRC"   & year > YEAR_MAX["TMF-JRC"]   ~ NA_real_,
+          TRUE ~ area_ha
+        )
       ) %>%
+      # Keep plotting window (1990–2024) even if values are NA
+      dplyr::filter(year >= 1990L, year <= 2024L) %>%
       dplyr::arrange(year, source_used) %>%
+      # Fill missing years per source (to keep gaps visible)
+      tidyr::complete(source_used, year = 1990:2024) %>%
+      # Cosmetic: trim leading zeros before first event
       dplyr::group_by(source_used) %>%
       dplyr::mutate(area_ha = trim_leading_zeros(area_ha)) %>%
       dplyr::ungroup()
@@ -349,12 +333,19 @@ for (LANG in LANGS) {
     year_max <- max(df_long$year, na.rm = TRUE)
 
     # plotting window
-    plot_min <- year_min + DROP_FIRST_YEARS
-    plot_max <- year_max - DROP_LAST_YEARS
+    plot_min <- PLOT_YEAR_MIN
+    plot_max <- PLOT_YEAR_MAX
 
     df_plot <- df_long %>%
       dplyr::filter(!is.na(area_ha), dplyr::between(year, plot_min, plot_max)) %>%
       droplevels()
+
+    # Aply dataset mode filter
+    if (DATASET_MODE == "tmf") {
+      df_plot <- df_plot %>% dplyr::filter(source_used == "TMF-JRC")
+    } else if (DATASET_MODE == "mb") {
+      df_plot <- df_plot %>% dplyr::filter(source_used == "MapBiomas")
+    }
 
     if (nrow(df_plot) == 0) {
       message(glue("⚠ No valid data after processing for {TERRITORY}"))
@@ -365,21 +356,33 @@ for (LANG in LANGS) {
 
     ### 3.3 Plot ----
     # ------------------------------------------------------------------------- - - -
-    p <- ggplot(df_plot, aes(x = year, y = area_ha, color = source_used, linetype = source_used)) +
-      geom_line(linewidth = 1.2, lineend = "round", na.rm = TRUE) +
-      geom_point(size = 4, stroke = 0, na.rm = TRUE) +
-      scale_color_manual(values = cols, breaks = present_sources, guide = guide_legend(title = NULL)) +
-      scale_linetype_manual(values = ltys, breaks = present_sources, guide = "none") +
-      axis_x_years_all(plot_min, plot_max) +
-      # axis_y_thousands_auto(max(df_plot$area_ha, na.rm = TRUE)) +
+    present_sources <- levels(droplevels(df_plot$source_used))
+    cols <- source_line_colors[present_sources]
+
+    p <- ggplot(df_plot, aes(x = year, y = area_ha, fill = source_used)) +
+      geom_col(
+        position = position_dodge(width = 0.85),
+        width = 0.8,
+        color = NA,  # sem borda
+        na.rm = TRUE
+      ) +
+      scale_fill_manual(
+        values = cols,
+        breaks = present_sources,
+        guide = guide_legend(
+          title = NULL
+          # override.aes = list(shape = 22, size = 2)
+        )
+      ) +
+      axis_x_years_all(PLOT_YEAR_MIN, PLOT_YEAR_MAX) +
       axis_y_ha_auto(max(df_plot$area_ha, na.rm = TRUE)) +
       labs(
-        title   = label("title_regrowth_in", territory = territory_title),
+        title   = label("title_regrowth_stock", territory = territory_title),
         x       = label("x_year"),
         y       = label("y_area_ha"),
         caption = caption_sources(df_plot, LANG)
       ) +
-      theme_time_series()
+      theme_bar_series()
 
     print(p)
     message(glue("✓ Plot generated for {TERRITORY}"))
@@ -387,7 +390,7 @@ for (LANG in LANGS) {
     ### 3.4 Export (fixed full-page size) ----
     # ------------------------------------------------------------------------- - - -
     if (WRITE_PLOT) {
-      file_stub <- glue("03_{TERRITORY}_regrowth_{LANG}")
+      file_stub <- glue("04_{TERRITORY}_regrowth_stock_{DATASET_MODE}_{LANG}")
 
       # PNG
       png_path <- file.path(OUTPUT_DIR, glue("{file_stub}.png"))

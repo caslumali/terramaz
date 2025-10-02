@@ -35,7 +35,6 @@ TERRITORY_LABELS <- c(
 )
 
 # Output file parameters (smaller than TS plots)
-FILENAME_STUB <- "hist_forest_integrity"
 UNITS         <- "mm"
 DPI           <- 300
 
@@ -311,7 +310,7 @@ for (LANG in LANGS) {
     
     # Export
     if (WRITE_PLOT) {
-      file_stub <- glue("01_{TERRITORY}_hist_forest_integrity_{LANG}")
+      file_stub <- glue("{TERRITORY}_hist_forest_integrity_{LANG}")
       
       # n_bars <- length(levels(df_all$x_comb)) 
       # bar_width_mm <- 10     # largura de cada barra em mm (ajustável)

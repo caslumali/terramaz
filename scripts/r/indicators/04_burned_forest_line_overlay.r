@@ -37,8 +37,8 @@ TERRITORY_LABELS <- c(
   madre_de_dios = "Madre de Dios"
 )
 
-# Fixed full-page export size (A4-width figures in your layout)
-FILENAME_STUB <- "burned_ts"
+# Fixed full-page export size
+FILENAME_FIRE <- "04_{territory}_burned_fo_nf_overlay_{lang}"
 FIG_WIDTH_MM  <- 431.8   # 17 in — full page width
 FIG_HEIGHT_MM <- 190
 UNITS         <- "mm"
@@ -73,19 +73,30 @@ LABELS <- list(
   ),
   # Legend texts for each panel (FO and NF)
   legend_fo = c(
-    fr = "Surface de forêt brûlée",
-    es = "Área de bosque quemada",
+    fr = "Surface brûlée en forêt",
+    es = "Área de bosque incendiada",
     pt = "Área de floresta queimada",
-    en = "Burned forest area (ha)"
+    en = "Burned forest area"
   ),
   legend_nf = c(
-    fr = "Surface de non-forêt brûlée",
-    es = "Área de no bosque quemada",
-    pt = "Área de não-floresta queimada",
+    fr = "Surface brûlée hors forêt",
+    es = "Área incendiada fuera del bosque",
+    pt = "Área queimada fora da floresta",
     en = "Burned non-forest area"
   ),
-  panel_fo = c(fr = "Forêt brûlée",      pt = "Floresta queimada",     es = "Bosque quemado",     en = "Burned forest"),
-  panel_nf = c(fr = "Non-forêt brûlée",  pt = "Não-floresta queimada", es = "No bosque quemado", en = "Burned non-forest")
+  # Panel titles
+  panel_fo = c(
+    fr = "Forêt brûlée",
+    pt = "Floresta queimada",
+    es = "Bosque incendiado",
+    en = "Burned forest"
+  ),
+  panel_nf = c(
+    fr = "Non-forêt brûlée",
+    pt = "Não-floresta queimada",
+    es = "Área no boscosa incendiada",
+    en = "Burned non-forest"
+  )
 )
 
 # Helper to resolve translated strings with glue()
@@ -102,7 +113,7 @@ source_line_colors <- c(
 )
 source_line_types  <- c(
   fo = "solid",
-  nf = "dashed"
+  nf = "solid"
 )
 
 ## 1.4 Theme & scales (consistent with other series) ----
@@ -117,7 +128,6 @@ theme_time_series <- function() {
       axis.text.y         = element_text(size = 11),
       axis.title.x        = element_text(size = 12, margin = margin(t = 12)),
       axis.title.y        = element_text(size = 12, margin = margin(r = 12)),
-      axis.title.y.right  = element_text(size = 12, margin = margin(l = 12)),
       panel.grid.major.x  = element_blank(),
       panel.grid.minor    = element_blank(),
       panel.grid.major.y  = element_line(color = "#e6e6e6", linewidth = 0.3),
@@ -167,6 +177,25 @@ axis_x_years_all <- function(year_min, year_max) {
 #     expand = expansion(mult = c(0.03, 0.03))
 #   )
 # }
+
+# Pretty Y axis in full hectares (no scientific, nice thousands separators)
+axis_y_ha_auto <- function(y_max_raw) {
+  ymax <- max(0, as.numeric(y_max_raw))
+  if (!is.finite(ymax) || ymax <= 0) ymax <- 10000
+
+  # Clean steps: 5k, 10k, 20k, 50k, 100k, 200k, 500k, 1M…
+  steps <- c(5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000)
+  target_n <- 6
+  step <- steps[ which.min(abs((ceiling(ymax/steps)+1) - target_n)) ]
+  ymax <- ceiling(ymax/step)*step
+
+  ggplot2::scale_y_continuous(
+    breaks = seq(0, ymax, by = step),
+    labels = function(v) format(v, big.mark = " ", scientific = FALSE, trim = TRUE),
+    limits = c(0, ymax),
+    expand = expansion(mult = c(0.03, 0.03))
+  )
+}
 
 ##%###########################################################################%##
 #                                                                               #
@@ -271,7 +300,7 @@ for (LANG in LANGS) {
 
     INPUT_DIR  <- file.path("results/metrics", TERRITORY)
     # Output in a territory/lang subfolder to help partners find assets easily
-    OUTPUT_DIR <- file.path("results/plots", TERRITORY, glue("{TERRITORY}_{LANG}"))
+    OUTPUT_DIR <- file.path("results/indicators",   TERRITORY, glue(TERRITORY, '_', LANG))
     if (!dir.exists(OUTPUT_DIR)) dir.create(OUTPUT_DIR, recursive = TRUE)
 
     ### 3.1 Load burned CSV ----
@@ -372,130 +401,87 @@ for (LANG in LANGS) {
     territory_title <- TERRITORY_LABELS[[TERRITORY]]
     leg_label <- label("legend_burned")  # localized legend string
 
-    ### 3.3 Plot (single panel, two lines with dual Y-axes) ----
+    ### 3.3 Plot (single panel, two overlaid lines on the SAME Y scale) ----
     # -------------------------------------------------------------------------
-    # EN: We plot FO (forest) on the left Y-axis (red). We rescale NF (non-forest)
-    #     by a linear factor 'k' so it fits the left axis, and we expose a
-    #     secondary right Y-axis that inverts the transform (~ . / k).
-    #     This keeps both axes *linearly consistent* (no cheating).
-    #     Legend shows both series with translated labels.
+    # EN: We overlay FO (forest) and NF (non-forest) on the same Y axis.
+    #     This keeps values comparable in absolute hectares and avoids any
+    #     rescaling tricks. The legend shows translated labels for both series.
 
-    # Split data per series (ensure both vectors exist even if one is all-NA)
+    # Split for clarity (not strictly necessary, but keeps aesthetics simple)
     df_fo <- df_plot %>% dplyr::filter(series == "fo")
     df_nf <- df_plot %>% dplyr::filter(series == "nf")
 
-    # Compute linear scaling factor (k = max(FO)/max(NF)), robust to zeros/NAs
-    fo_max <- suppressWarnings(max(df_fo$area_ha, na.rm = TRUE))
-    nf_max <- suppressWarnings(max(df_nf$area_ha, na.rm = TRUE))
-    fo_max <- ifelse(is.finite(fo_max), fo_max, 1)
-    nf_max <- ifelse(is.finite(nf_max) && nf_max > 0, nf_max, 1)
-    k <- fo_max / nf_max
-    if (!is.finite(k) || k <= 0) k <- 1  # EN: safety fallback
+    # Multilingual legend labels
+    legend_text_fo <- label("legend_fo")  # e.g., "Área queimada na floresta"
+    legend_text_nf <- label("legend_nf")  # e.g., "Área queimada fora da floresta"
 
-    # Optional: use a quantile-based scale to reduce outlier influence
-    # qfo <- suppressWarnings(quantile(df_fo$area_ha, 0.95, na.rm = TRUE))
-    # qnf <- suppressWarnings(quantile(df_nf$area_ha, 0.95, na.rm = TRUE))
-    # if (is.finite(qfo) && is.finite(qnf) && qnf > 0) k <- qfo / qnf
-
-    # Multilingual labels
+    # Title and caption
     territory_title <- TERRITORY_LABELS[[TERRITORY]]
-    legend_text_fo  <- label("legend_fo")  # e.g., "Área queimada na floresta"
-    legend_text_nf  <- label("legend_nf")  # e.g., "Área queimada fora da floresta"
 
-    # Colors (pull from your palette)
+    # Compute a pretty Y scale based on BOTH series (no scientific notation)
+    ymax_all <- suppressWarnings(max(df_plot$area_ha, na.rm = TRUE))
+    y_scale  <- axis_y_ha_auto(ymax_all)
+
+    # Colors/linetypes pulled from your palette (stable keys: fo, nf)
     col_fo <- source_line_colors[["fo"]]
     col_nf <- source_line_colors[["nf"]]
+    lt_fo  <- source_line_types[["fo"]]
+    lt_nf  <- source_line_types[["nf"]]
 
-    # Build combined dataset:
-    # - FO stays as-is
-    # - NF is rescaled (area_ha_scaled = area_ha * k) so it fits the left axis.
-    df_comb <- bind_rows(
-      df_fo %>% mutate(area_ha_scaled = area_ha),            # FO on left axis
-      df_nf %>% mutate(area_ha_scaled = area_ha * k)         # NF scaled to left axis
-    )
-
-    # Pretty Y axis in full hectares (no scientific, nice thousands separators)
-    y_max <- max(c(df_fo$area_ha, df_nf$area_ha * k), na.rm = TRUE)
-    if (!is.finite(y_max) || y_max <= 0) y_max <- 10000
-
-    steps <- c(5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000)
-    target_n <- 6
-    step <- steps[which.min(abs((ceiling(y_max/steps)+1) - target_n))]
-    y_max <- ceiling(y_max/step) * step
-
-    # Plot: two lines with different aesthetics, dual axes
-    p <- ggplot(df_comb, aes(x = year, y = area_ha_scaled)) +
-      # NF line (scaled; still plotted against left axis, but labeled on right axis)
+    p <- ggplot(NULL, aes(x = year, y = area_ha)) +
+      # FO line (red)
       geom_line(
-        data = dplyr::filter(df_comb, series == "nf"),
-        aes(color = "nf", linetype = "nf"),
-        linewidth = 0.8, lineend = "round", na.rm = TRUE
+        data = df_fo, aes(color = "fo", linetype = "fo"),
+        linewidth = 1.2, lineend = "round", na.rm = TRUE
       ) +
       geom_point(
-        data = dplyr::filter(df_comb, series == "nf"),
-        aes(color = "nf"),
-        size = 2.5, stroke = 0, na.rm = TRUE
-      ) +
-      # FO line (left axis)
-      geom_line(
-        data = dplyr::filter(df_comb, series == "fo"),
-        aes(color = "fo", linetype = "fo"),
-        linewidth = 1, lineend = "round", na.rm = TRUE
-      ) +
-      geom_point(
-        data = dplyr::filter(df_comb, series == "fo"),
-        aes(color = "fo"),
+        data = df_fo, aes(color = "fo"),
         size = 3.5, stroke = 0, na.rm = TRUE
       ) +
-      # Manual scales for color/linetype with clear legend labels
+      # NF line (orange)
+      geom_line(
+        data = df_nf, aes(color = "nf", linetype = "nf"),
+        linewidth = 1.2, lineend = "round", na.rm = TRUE
+      ) +
+      geom_point(
+        data = df_nf, aes(color = "nf"),
+        size = 3.5, stroke = 0, na.rm = TRUE
+      ) +
+      # Manual legend (translated labels)
       scale_color_manual(
         values = c(fo = col_fo, nf = col_nf),
         breaks = c("fo", "nf"),
-        labels = c(fo = legend_text_fo, nf = legend_text_nf)
+        labels = c(fo = legend_text_fo, nf = legend_text_nf),
+        guide  = guide_legend(title = NULL)
       ) +
       scale_linetype_manual(
-        values = c(fo = source_line_types[["fo"]], nf = source_line_types[["nf"]]),
+        values = c(fo = lt_fo, nf = lt_nf),
         breaks = c("fo", "nf"),
         labels = c(fo = legend_text_fo, nf = legend_text_nf),
-        guide  = "none"   # EN: hide linetype legend to avoid the extra black legend
+        guide  = "none"
       ) +
-      # Force full time window and pretty Y scales on both axes
+      # Consistent X across territories and pretty Y in hectares
       axis_x_years_all(BURN_YEAR_MIN, BURN_YEAR_MAX) +
-      scale_y_continuous(
-        breaks = seq(0, y_max, by = step),
-        labels = scales::label_number(big.mark = " ", accuracy = 1, trim = TRUE),
-        limits = c(0, y_max),
-        expand = expansion(mult = c(0.03, 0.03)),
-        sec.axis = sec_axis(
-          transform = ~ . / k,
-          name  = paste0(legend_text_nf, " (ha)"),
-          breaks = pretty_breaks(n = 6),
-          labels = scales::label_number(big.mark = " ", accuracy = 1, trim = TRUE)
-        )
-      ) +
+      y_scale +
       labs(
         title   = label("title_burned_in", territory = territory_title),
         x       = label("x_year"),
-        y       = paste0(legend_text_fo, " (ha)"),
+        y       = label("y_area_ha"),
         caption = caption_burned(TERRITORY, LANG)
       ) +
       theme_time_series() +
       theme(
-        legend.position     = "top",
-        # EN: color-code the Y axes to match the lines (clearer reading)
-        axis.title.y        = element_text(color = col_fo),
-        axis.text.y         = element_text(color = col_fo),
-        axis.title.y.right  = element_text(color = col_nf),
-        axis.text.y.right   = element_text(color = col_nf)
+        legend.position = "top"  # EN: show both series names clearly
       )
 
     print(p)
-    message(glue("✓ Plot (dual-axis, two lines) generated for {TERRITORY}"))
+    message(glue("✓ Plot (two overlaid lines on same Y scale) generated for {TERRITORY}"))
+
 
     ### 3.4 Export (fixed full-page size) ----
     # ----------------------------------------------------------------------- - - -
     if (WRITE_PLOT) {
-      file_stub <- glue("04_{TERRITORY}_burned_fo_nf_dualaxis_{LANG}")
+      file_stub <- glue(FILENAME_FIRE, territory = TERRITORY, lang = LANG)
 
       # PNG
       png_path <- file.path(OUTPUT_DIR, glue("{file_stub}.png"))
@@ -516,9 +502,9 @@ for (LANG in LANGS) {
       }
 
       message("✅ Saved:")
-      message(glue("   PNG: {basename(png_path)}  ({FIG_WIDTH_MM}×{FIG_HEIGHT_MM} mm)"))
+      message(glue("   PNG: {basename(png_path)}  ({FIG_WIDTH_MM}x{FIG_HEIGHT_MM} mm)"))
       if (isTRUE(WRITE_SVG)) {
-        message(glue("   SVG: {basename(svg_path)}  ({FIG_WIDTH_MM}×{FIG_HEIGHT_MM} mm)"))
+        message(glue("   SVG: {basename(svg_path)}  ({FIG_WIDTH_MM}x{FIG_HEIGHT_MM} mm)"))
       } else {
         message("   SVG: (skipped)")
       }

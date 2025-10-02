@@ -36,16 +36,14 @@ TERRITORY_LABELS <- c(
   madre_de_dios = "Madre de Dios"
 )
 
-# I/O roots
-ROOT_IN  <- "results/metrics"
-ROOT_OUT <- "results/plots"
-
 # File name stub and figure size
-FILENAME_STUB <- "precip_box"
-FIG_WIDTH_MM  <- 431.8  # 17 in
-FIG_HEIGHT_MM <- 220    # a bit taller for boxplots
-UNITS         <- "mm"
-DPI           <- 300
+FILENAME_ANUAL   <- "07a_{TERRITORY}_precipitation_annual_{LANG}"
+FILENAME_MONTHLY <- "07b_{TERRITORY}_precipitation_monthly_{LANG}"
+
+FIG_WIDTH_MM     <- 431.8  # 17 in
+FIG_HEIGHT_MM    <- 220    # a bit taller for boxplots
+UNITS            <- "mm"
+DPI              <- 300
 
 # Performance guard: use all rows by default. If files are huge, set a cap per group.
 MAX_ROWS_PER_GROUP <- Inf  # e.g., 20000 to speed up if needed
@@ -63,6 +61,7 @@ SEP_LINE_ALPHA <- 0.9
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
 LANGS <- c("fr")  # "pt" | "es" | "fr" | "en"
+
 LABELS <- list(
   # Titles
   title_precip_annual_in = c(
@@ -421,8 +420,8 @@ for (LANG in LANGS) {
     cat(glue("PROCESSING: {toupper(TERRITORY)}"))
     cat("\n", paste(rep("=", 64), collapse=""), "\n", sep = "")
 
-    INPUT_DIR  <- file.path(ROOT_IN, TERRITORY)
-    OUTPUT_DIR <- file.path(ROOT_OUT, TERRITORY, glue("{TERRITORY}_{LANG}"))
+    INPUT_DIR  <- file.path("results/metrics", TERRITORY)
+    OUTPUT_DIR <- file.path("results/indicators",   TERRITORY, glue(TERRITORY, '_', LANG))
     if (!dir.exists(OUTPUT_DIR)) dir.create(OUTPUT_DIR, recursive = TRUE)
 
     ## 3.2 Load annual CSV ----
@@ -486,7 +485,8 @@ for (LANG in LANGS) {
     if (!is.null(annual_df)) {
       pA <- plot_precip_annual_boxes(annual_df, LANG, territory_title)
       if (WRITE_PLOT) {
-        file_stub <- glue("07a_{TERRITORY}_precip_annual_box_{LANG}")
+        file_stub <- glue(FILENAME_ANUAL, TERRITORY = TERRITORY, LANG = LANG)
+        
         png_path  <- file.path(OUTPUT_DIR, glue("{file_stub}.png"))
         ggsave(png_path, pA, width = FIG_WIDTH_MM, height = FIG_HEIGHT_MM, units = UNITS, dpi = DPI, bg = "white")
         if (isTRUE(WRITE_SVG)) {
@@ -507,7 +507,8 @@ for (LANG in LANGS) {
     if (!is.null(monthly_df)) {
       pM <- plot_precip_monthly_boxes(monthly_df, LANG, territory_title)
       if (WRITE_PLOT) {
-        file_stub <- glue("07b_{TERRITORY}_precip_monthly_box_{LANG}")
+        file_stub <- glue(FILENAME_MONTHLY, TERRITORY = TERRITORY, LANG = LANG)
+
         png_path  <- file.path(OUTPUT_DIR, glue("{file_stub}.png"))
         ggsave(png_path, pM, width = FIG_WIDTH_MM, height = FIG_HEIGHT_MM, units = UNITS, dpi = DPI, bg = "white")
         if (isTRUE(WRITE_SVG)) {
