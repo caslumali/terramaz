@@ -57,5 +57,4 @@ dependencies:
 
   # Ajout de Quarto pour la génération de documents et de rapports
   - quarto         # Outil pour la création de rapports, documents scientifiques et présentations
-
-
+  

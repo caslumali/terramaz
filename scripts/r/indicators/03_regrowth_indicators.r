@@ -58,7 +58,7 @@ WRITE_SVG  <- FALSE
 DATASET_MODE <- "mb"  
 
 # Territories to process
-# TERRITORIES <- c("cotriguacu")  # quick test
+# TERRITORIES <- c("cotriguacu", "paragominas")  # quick test
 TERRITORIES <- c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
 
 TERRITORY_LABELS <- c(
@@ -213,6 +213,7 @@ theme_bar_age <- function() {
 axis_x_years_all <- function(year_min, year_max) {
   scale_x_continuous(
     breaks = seq(year_min, year_max, by = 1),
+    limits = c(year_min, year_max), 
     expand = expansion(mult = c(0.01, 0.02))
   )
 }
@@ -314,7 +315,7 @@ trim_leading_zeros <- function(y) {
 
 ##%###########################################################################%##
 #                                                                               #
-#                         3) Processing Flow plots                           ----
+#                         3) Flow processing loop                            ----
 #                                                                               #
 ##%###########################################################################%##
 
@@ -377,7 +378,7 @@ for (LANG in LANGS) {
       dplyr::select(year, source_used, area_ha) %>%
       dplyr::arrange(year, source_used)
 
-    is_cp <- tolower(TERRITORY) %in% c("cotriguacu","paragominas")
+    is_cp <- tolower(TERRITORY) %in% c("cotriguacu", "paragominas", "guaviare")
     if (is_cp) {
       mb_site_file <- file.path(COMP_DIR, glue("{TERRITORY}_regrowth_flow_mb_site_1985_2024.csv"))
       mb_site <- read_mb_site_regrowth(mb_site_file)
@@ -441,7 +442,7 @@ for (LANG in LANGS) {
 
     # plotting window
     plot_min <- PLOT_YEAR_MIN
-    plot_max <- PLOT_YEAR_MAX
+    plot_max <- (PLOT_YEAR_MAX - 2)
 
     df_plot <- df_long %>%
       dplyr::filter(!is.na(area_ha), dplyr::between(year, plot_min, plot_max)) %>%
@@ -472,7 +473,7 @@ for (LANG in LANGS) {
       scale_linetype_manual(values = ltys,
          breaks = present_sources,
           guide = "none") +
-      axis_x_years_all(PLOT_YEAR_MIN, PLOT_YEAR_MAX) +
+      axis_x_years_all(plot_min, plot_max) +
       axis_y_ha_auto(max(df_plot$area_ha, na.rm = TRUE)) +
       labs(
         title   = label("title_regrowth_flow", territory = territory_title),
@@ -588,7 +589,7 @@ for (LANG in LANGS) {
       dplyr::select(year, source_used, area_ha) %>%
       dplyr::arrange(year, source_used)
 
-    is_cp <- tolower(TERRITORY) %in% c("cotriguacu","paragominas")
+    is_cp <- tolower(TERRITORY) %in% c("cotriguacu", "paragominas", "guaviare")
     if (is_cp) {
       mb_site_file <- file.path(COMP_DIR, glue("{TERRITORY}_regrowth_stock_mb_site_1985_2024.csv"))
       mb_site <- read_mb_site_regrowth(mb_site_file)
@@ -609,11 +610,14 @@ for (LANG in LANGS) {
 
   ### 4.2 Filter, cast, and validate ----
     # ----------------------------------------------------------------------- - - -
-    # Valid coverage for flow:
-    # - MapBiomas events: 1990–2021 (t+2 rule → no events in 2022+)
-    # - TMF-JRC flow:     1990–2022 (mask 2023–2024 as NODATA)
+    is_site <- tolower(TERRITORY) %in% c("cotriguacu", "paragominas", "guaviare")
+    is_gee <- tolower(TERRITORY) == "madre_de_dios"
+
     YEAR_MIN <- c(`TMF-JRC` = 1990L, MapBiomas = 1990L)
-    YEAR_MAX <- c(`TMF-JRC` = 2022L, MapBiomas = 2023L)
+    YEAR_MAX <- c(`TMF-JRC` = 2022L, MapBiomas = ifelse(is_site, 2024L, 2023L))
+
+    plot_min <- 1990L
+    plot_max <- ifelse(is_site, 2024L, 2023L)
 
     df_long <- long_main %>%
       dplyr::mutate(
@@ -621,7 +625,7 @@ for (LANG in LANGS) {
         year        = as.integer(year),
         area_ha     = suppressWarnings(as.numeric(area_ha))
       ) %>%
-      # Force NODATA (NA) after valid coverage for each source
+      # EN: force NODATA after valid coverage for each source
       dplyr::mutate(
         area_ha = dplyr::case_when(
           source_used == "MapBiomas" & year > YEAR_MAX["MapBiomas"] ~ NA_real_,
@@ -629,12 +633,12 @@ for (LANG in LANGS) {
           TRUE ~ area_ha
         )
       ) %>%
-      # Keep plotting window (1990–2024) even if values are NA
-      dplyr::filter(year >= 1990L, year <= 2024L) %>%
+      # EN: keep territory-specific plotting window
+      dplyr::filter(year >= plot_min, year <= plot_max) %>%
       dplyr::arrange(year, source_used) %>%
-      # Fill missing years per source (to keep gaps visible)
-      tidyr::complete(source_used, year = 1990:2024) %>%
-      # Cosmetic: trim leading zeros before first event
+      # EN: fill missing years per source within [plot_min, plot_max]
+      tidyr::complete(source_used, year = plot_min:plot_max) %>%
+      # EN: cosmetic: trim leading zeros before first event per source
       dplyr::group_by(source_used) %>%
       dplyr::mutate(area_ha = trim_leading_zeros(area_ha)) %>%
       dplyr::ungroup()
@@ -650,12 +654,9 @@ for (LANG in LANGS) {
     year_min <- min(df_long$year, na.rm = TRUE)
     year_max <- max(df_long$year, na.rm = TRUE)
 
-    # plotting window
-    plot_min <- PLOT_YEAR_MIN
-    plot_max <- PLOT_YEAR_MAX
-
     df_plot <- df_long %>%
-      dplyr::filter(!is.na(area_ha), dplyr::between(year, plot_min, plot_max)) %>%
+      dplyr::filter(dplyr::between(year, plot_min, plot_max)) %>%
+      dplyr::mutate(area_ha = replace_na(area_ha, 0)) %>%
       droplevels()
 
     # Aply dataset mode filter
@@ -692,7 +693,7 @@ for (LANG in LANGS) {
           # override.aes = list(shape = 22, size = 2)
         )
       ) +
-      axis_x_years_all(PLOT_YEAR_MIN, PLOT_YEAR_MAX) +
+      axis_x_years_all(plot_min, plot_max) +
       axis_y_ha_auto(max(df_plot$area_ha, na.rm = TRUE)) +
       labs(
         title   = label("title_regrowth_stock", territory = territory_title),
@@ -729,9 +730,9 @@ for (LANG in LANGS) {
       }
 
       message("✅ Saved:")
-      message(glue("   PNG: {basename(png_path)}  ({FIG_WIDTH_MM}×{FIG_HEIGHT_MM} mm)"))
+      message(glue("   PNG: {basename(png_path)}  ({FIG_WIDTH_MM}X{FIG_HEIGHT_MM} mm)"))
       if (isTRUE(WRITE_SVG)) {
-        message(glue("   SVG: {basename(svg_path)}  ({FIG_WIDTH_MM}×{FIG_HEIGHT_MM} mm)"))
+        message(glue("   SVG: {basename(svg_path)}  ({FIG_WIDTH_MM}X{FIG_HEIGHT_MM} mm)"))
       } else {
         message("   SVG: (skipped)")
       }
@@ -764,16 +765,16 @@ for (LANG in LANGS) {
 
     ### 5.1 Load regrowth AGE (MB-only) ----
     # ----------------------------------------------------------------------- - - -
-    is_cp <- tolower(TERRITORY) %in% c("cotriguacu","paragominas")
+    is_cp <- tolower(TERRITORY) %in% c("cotriguacu", "paragominas", "guaviare")
 
     if (is_cp) {
     # Brazil (site CSVs, special format: columns = "1 Ano", "2 Anos", ...; first row = "351 ha (4%)")
     main_csv <- file.path(COMP_DIR, glue("{TERRITORY}_regrowth_age_mb_site_1985_2024.csv"))
     if (!file.exists(main_csv)) {
-      message(glue("⚠ Site AGE CSV not found for {TERRITORY} — skipping."))
+      message(glue("⚠ MapBiomas (site) — AGE CSV not found for {TERRITORY}, skipping."))
       next
     }
-    message(glue("📊 Loading (site AGE): {basename(main_csv)}"))
+    message(glue("🔗 MapBiomas (site) — loading official age dataset {basename(main_csv)}"))
 
     # read raw (header = ages, first row = "N ha (%)")
     loc <- readr::locale(decimal_mark = ",", grouping_mark = ".", encoding = "UTF-8")
@@ -811,10 +812,10 @@ for (LANG in LANGS) {
         full.names = TRUE, ignore.case = TRUE
       )
       if (length(main_csv) == 0) {
-        message(glue("⚠ AGE CSV not found for {TERRITORY} — skipping."))
+        message(glue("⚠ MapBiomas (GEE) — AGE CSV not found for {TERRITORY}, skipping."))
         next
       }
-      message(glue("📊 Loading (GEE AGE): {basename(main_csv[1])}"))
+      message(glue("🔗 MapBiomas (GEE) — loading generated age dataset {basename(main_csv[1])}"))
       df <- suppressMessages(readr::read_csv(main_csv[1], show_col_types = FALSE))
 
       # GEE datasets go until 2023 → max age ≈ 36

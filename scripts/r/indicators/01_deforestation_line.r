@@ -197,26 +197,69 @@ read_prodes_official <- function(path) {
 }
 
 read_mb_site <- function(path) {
-  if (!file.exists(path)) return(NULL)
-  loc <- readr::locale(decimal_mark = ",", grouping_mark = ".", encoding = "UTF-8")
-  df  <- readr::read_csv(path, show_col_types = FALSE, locale = loc)
+  if (!file.exists(path) || length(path) == 0) return(NULL)
 
-  # Identify year column (flexible)
-  year_col <- names(df)[stringr::str_detect(tolower(names(df)), "^(ano|year)$")]
+  # Lê o arquivo (tenta detectar decimal = "." ou ",")
+  df <- tryCatch(
+    readr::read_csv(path, show_col_types = FALSE,
+                    locale = readr::locale(decimal_mark = ".", grouping_mark = ",")),
+    error = function(e)
+      readr::read_csv(path, show_col_types = FALSE,
+                      locale = readr::locale(decimal_mark = ",", grouping_mark = "."))
+  )
+
+  nms <- names(df)
+
+  # === Caso 1: formato "wide" (como Madre de Dios) ===
+  if ("Classe" %in% nms && any(stringr::str_detect(nms, "^\\d{4}$"))) {
+    message(glue::glue("🌎 Detected wide format in {basename(path)} (keeping only primary forest loss)"))
+    
+    out <- df %>%
+      # mantém apenas a linha de floresta primária
+      dplyr::filter(stringr::str_detect(Classe, "(?i)vegetaci[oó]n primaria")) %>%
+      tidyr::pivot_longer(
+        cols = tidyselect::matches("^\\d{4}$"),
+        names_to = "year",
+        values_to = "area_ha"
+      ) %>%
+      dplyr::mutate(
+        year = as.integer(year),
+        area_ha = as.numeric(area_ha)
+      ) %>%
+      dplyr::select(year, area_ha) %>%
+      dplyr::filter(!is.na(year), !is.na(area_ha))
+    
+    return(out)
+  }
+
+  # === Caso 2: formato "long" (Brasil, Colômbia etc.) ===
+  loc <- readr::locale(decimal_mark = ",", grouping_mark = ".", encoding = "UTF-8")
+  df <- suppressMessages(readr::read_csv(path, show_col_types = FALSE, locale = loc))
+  nms <- names(df)
+
+  year_col <- nms[stringr::str_detect(tolower(nms), "^(ano|year)$")]
   if (length(year_col) == 0) return(NULL)
-  value_cols <- setdiff(names(df), year_col)
+
+  value_cols <- setdiff(nms, year_col)
+  primary_col <- value_cols[stringr::str_detect(tolower(value_cols), "prim(aria)?|primary")][1]
+  if (is.na(primary_col)) {
+    warning(glue::glue("⚠ Nenhuma coluna de floresta primária encontrada em {basename(path)}"))
+    return(NULL)
+  }
 
   out <- df %>%
-    rename(year = all_of(year_col)) %>%
-    mutate(across(all_of(value_cols), ~ dplyr::na_if(stringr::str_trim(as.character(.x)), "-"))) %>%
-    mutate(across(all_of(value_cols), ~ readr::parse_number(.x, locale = loc))) %>%
-    mutate(across(all_of(value_cols), ~ tidyr::replace_na(.x, 0))) %>%
-    mutate(area_ha = rowSums(across(all_of(value_cols)), na.rm = TRUE)) %>%
-    transmute(year = as.integer(year), area_ha = as.numeric(area_ha)) %>%
-    filter(!is.na(year))
-  if (nrow(out) == 0) return(NULL)
-  out
+    dplyr::rename(year = all_of(year_col)) %>%
+    dplyr::mutate(across(all_of(value_cols),
+                         ~ dplyr::na_if(stringr::str_trim(as.character(.x)), "-"))) %>%
+    dplyr::mutate(across(all_of(value_cols),
+                         ~ readr::parse_number(.x, locale = loc))) %>%
+    dplyr::transmute(year = as.integer(year),
+                     area_ha = as.numeric(.data[[primary_col]])) %>%
+    dplyr::filter(!is.na(year), !is.na(area_ha))
+  
+  return(out)
 }
+
 
 ## 2.5 Caption dynamic for territories ----
 # ------------------------------------------------------------------------- - - -
@@ -299,19 +342,24 @@ for (LANG in LANGS) {
 
     ### 3.2 INPE/PRODES override (Cotriguacu & Paragominas) ----
     # ----------------------------------------------------------------------- - - -
-    is_cp <- tolower(TERRITORY) %in% c("cotriguacu", "paragominas")
+    is_cp <- tolower(TERRITORY) %in% c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
+    
     if (is_cp) {
       prodes_file <- file.path(COMP_DIR, glue("{TERRITORY}_deforestation_prodes_2001_2022.csv"))
       prodes_off  <- read_prodes_official(prodes_file)
+      # Detecta faixa real de anos no CSV oficial
       if (!is.null(prodes_off)) {
+        range_off <- range(prodes_off$year, na.rm = TRUE)
+
         prodes_off <- prodes_off %>%
-          filter(dplyr::between(year, 2001L, 2022L)) %>%
           mutate(source_used = "INPE")
-        # remove série INPE do GEE nesses anos e substitui pela oficial
+
+        # Remove só o intervalo realmente coberto pelo CSV oficial
         long_main <- long_main %>%
-          filter(!(source_used == "INPE" & dplyr::between(year, 2001L, 2022L))) %>%
+          filter(!(source_used == "INPE" & dplyr::between(year, range_off[1], range_off[2]))) %>%
           bind_rows(prodes_off)
-        message(glue("🔗 INPE/PRODES: override 2001-2022 com {basename(prodes_file)} (km²→ha)."))
+
+        message(glue("🔗 INPE/PRODES: override {range_off[1]}–{range_off[2]} com {basename(prodes_file)} (km²→ha)."))
       } else {
         message("ℹ INPE/PRODES: arquivo não encontrado/parsable — mantendo série do GEE.")
       }
@@ -320,24 +368,41 @@ for (LANG in LANGS) {
   ### 3.3 MapBiomas (site oficial) override (Cotriguacu & Paragominas) ----
   # ----------------------------------------------------------------------- - - -
   if (is_cp) {
-    mb_site_file <- file.path(COMP_DIR, glue("{TERRITORY}_deforestation_mb_site_1985_2024.csv"))
+    mb_site_file <- list.files(
+      path = COMP_DIR,
+      pattern = glue("^{TERRITORY}_deforestation_mb_site_.*\\.csv$"),
+      full.names = TRUE
+    )
     mb_site <- read_mb_site(mb_site_file)
+    
     if (!is.null(mb_site)) {
+      # Define intervalo de substituição
+      if (tolower(TERRITORY) == "madre_de_dios") {
+        year_replace_min <- 2001L
+        year_replace_max <- 2024L
+      } else {
+        year_replace_min <- 1985L
+        year_replace_max <- 2024L
+      }
+      
       mb_site <- mb_site %>%
-        filter(dplyr::between(year, 1985L, 2024L)) %>%
+        filter(dplyr::between(year, year_replace_min, year_replace_max)) %>%
         mutate(source_used = "MapBiomas")
-      # remove MapBiomas do GEE e substitui pela série oficial do site (1985-2024)
+
+      # Remove apenas o intervalo coberto pelo CSV oficial
       long_main <- long_main %>%
-        filter(source_used != "MapBiomas") %>%
+        filter(!(source_used == "MapBiomas" &
+                dplyr::between(year, year_replace_min, year_replace_max))) %>%
         bind_rows(mb_site)
-      message(glue("🔗 MapBiomas (site): override 1985-2024 com {basename(mb_site_file)}."))
+
+      message(glue("🔗 MapBiomas (site): override {year_replace_min}-{year_replace_max} com {basename(mb_site_file)}."))
     } else {
       message("ℹ MapBiomas (site): arquivo não encontrado/parsable — mantendo série do GEE.")
     }
   }
 
   if (is_cp && !is.null(mb_site)) {
-    message("MB-site tail: ",
+    message("l: ",
       mb_site %>% filter(year >= 2020) %>%
         arrange(year) %>%
         mutate(area_ha = round(area_ha, 2)) %>%
@@ -385,11 +450,11 @@ for (LANG in LANGS) {
     } else if (tolower(TERRITORY) == "guaviare") {
       # IDEAM from 2012
       YEAR_MIN <- c(`JRC-TMF` = 1990L, MapBiomas = 1990L, IDEAM = 2012L)
-      YEAR_MAX <- c(`JRC-TMF` = 2024L, MapBiomas = 2023L, IDEAM = 2023L)
+      YEAR_MAX <- c(`JRC-TMF` = 2024L, MapBiomas = 2024L, IDEAM = 2023L)
     } else if (tolower(TERRITORY) == "madre_de_dios") {
       # No INPE or IDEAM
       YEAR_MIN <- c(`JRC-TMF` = 1990L, MapBiomas = 1990L)
-      YEAR_MAX <- c(`JRC-TMF` = 2024L, MapBiomas = 2023L)
+      YEAR_MAX <- c(`JRC-TMF` = 2024L, MapBiomas = 2024L)
     } else {
       message(glue("⚠ Unknown territory '{TERRITORY}' for year coverage — skipping."))
       next

@@ -31,7 +31,7 @@ WRITE_SVG  <- FALSE
 N_STAGES <- 3L               # set to 3L if you want T0→T1→T2
 
 # Visualization flags for Sankey
-STAYERS_DEFAULT   <- FALSE
+STAYERS_DEFAULT   <- TRUE
 SHOW_ALL <- FALSE
 
 # Aesthetics 
@@ -59,8 +59,8 @@ TERRITORY_OVERRIDES <- list(
 )
 
 # Territories to render
-# TERRITORIES <- c("guaviare", "madre_de_dios") # quick test
-TERRITORIES <- c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
+TERRITORIES <- c("paragominas")
+# TERRITORIES <- c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
 
 # Drop these classes from the analysis (e.g., Water)
 DROP_CLASSES <- NULL        # set to NULL to keep all

@@ -14,7 +14,8 @@
 *.txt
 *.stan
 *.exe
-*.ico 
+*.ico
+*.yml 
 
 # Shapefiles and related files
 *.csv
@@ -42,12 +43,12 @@
 # Ignore specific documents
 desktop.ini
 chat.md
-CLAUDE.md
 explanation_Terramaz.md
 glad_gee_app.js
 
 
 # Ignore folders
+/deforisk
 /data
 /docs
 /results
