@@ -58,7 +58,7 @@ WRITE_SVG  <- FALSE
 DATASET_MODE <- "mb"  
 
 # Territories to process
-# TERRITORIES <- c("cotriguacu", "paragominas")  # quick test
+# TERRITORIES <- c("paragominas")  # quick test
 TERRITORIES <- c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
 
 TERRITORY_LABELS <- c(
@@ -79,7 +79,7 @@ FIG_HEIGHT_MM  <- 152.4   # 6 in  — consistent height
 UNITS          <- "mm"
 DPI            <- 300
 
-# Plot window (keep full axis to show NODATA years)
+# # Plot window (keep full axis to show NODATA years)
 PLOT_YEAR_MIN <- 1990L
 PLOT_YEAR_MAX <- 2024L
 
@@ -213,7 +213,7 @@ theme_bar_age <- function() {
 axis_x_years_all <- function(year_min, year_max) {
   scale_x_continuous(
     breaks = seq(year_min, year_max, by = 1),
-    limits = c(year_min, year_max), 
+    limits = c(year_min - 0.5, year_max + 0.5), 
     expand = expansion(mult = c(0.01, 0.02))
   )
 }
@@ -534,6 +534,10 @@ for (LANG in LANGS) {
   message(glue("🌐 Language: {LANG}"))
   for (TERRITORY in TERRITORIES) {
 
+    # Debug approach
+    TERRITORY <- "paragominas"
+    LANG <- "fr"
+
     cat("\n", paste(rep("=", 64), collapse=""), "\n", sep = "")
     cat(glue("PROCESSING: {toupper(TERRITORY)}"))
     cat("\n", paste(rep("=", 64), collapse=""), "\n", sep = "")
@@ -556,7 +560,7 @@ for (LANG in LANGS) {
     }
     message(glue("📊 Loading: {basename(main_csv[1])}"))
     df <- suppressMessages(readr::read_csv(main_csv[1], show_col_types = FALSE))
-
+    
     # Robust year column detection
     nms_lc <- tolower(names(df))
     year_candidates <- c("year","ano","yr","year_int")
@@ -656,7 +660,7 @@ for (LANG in LANGS) {
 
     df_plot <- df_long %>%
       dplyr::filter(dplyr::between(year, plot_min, plot_max)) %>%
-      dplyr::mutate(area_ha = replace_na(area_ha, 0)) %>%
+      dplyr::mutate(area_ha = tidyr::replace_na(area_ha, 0)) %>%
       droplevels()
 
     # Aply dataset mode filter
@@ -666,6 +670,13 @@ for (LANG in LANGS) {
       df_plot <- df_plot %>% dplyr::filter(source_used == "MapBiomas")
     }
 
+    plot_max <- max(df_plot$year[df_plot$area_ha > 0], na.rm = TRUE)
+    if (!is.finite(plot_max)) {
+      plot_max <- max(df_plot$year[!is.na(df_plot$area_ha)], na.rm = TRUE)
+    }
+    
+    df_plot <- df_plot %>% dplyr::filter(year <= plot_max)
+
     if (nrow(df_plot) == 0) {
       message(glue("⚠ No valid data after processing for {TERRITORY}"))
       next
@@ -673,6 +684,7 @@ for (LANG in LANGS) {
 
     territory_title <- TERRITORY_LABELS[[TERRITORY]]
 
+    
     ### 4.3 Plot ----
     # ------------------------------------------------------------------------- - - -
     present_sources <- levels(droplevels(df_plot$source_used))
