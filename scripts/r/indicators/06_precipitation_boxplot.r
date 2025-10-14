@@ -37,8 +37,8 @@ TERRITORY_LABELS <- c(
 )
 
 # File name stub and figure size
-FILENAME_ANUAL   <- "07a_{TERRITORY}_precipitation_annual_{LANG}"
-FILENAME_MONTHLY <- "07b_{TERRITORY}_precipitation_monthly_{LANG}"
+FILENAME_ANUAL   <- "06a_{TERRITORY}_precipitation_annual_{LANG}"
+FILENAME_MONTHLY <- "06b_{TERRITORY}_precipitation_monthly_{LANG}"
 
 FIG_WIDTH_MM     <- 431.8  # 17 in
 FIG_HEIGHT_MM    <- 220    # a bit taller for boxplots

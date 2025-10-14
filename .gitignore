@@ -38,6 +38,7 @@
 *.out
 *.lof
 *.lot
+*.rels
 
 
 # Ignore specific documents
@@ -49,11 +50,9 @@ glad_gee_app.js
 
 # Ignore folders
 /deforisk
-/data
+/data_raw
 /docs
 /results
 /qgis
 /scripts/quarto
 __pycache__
-
-# Ignore temporaire files
