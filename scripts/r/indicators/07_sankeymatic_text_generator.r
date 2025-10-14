@@ -23,10 +23,10 @@ FILENAME_TXT <- "{territory}_sankeymatic_{lang}.txt"
 
 ## 1.1 Territories & stage years ----
 STAGE_YEARS <- list(
-  cotriguacu    = c(1991L, 2008L, 2024L),
-  paragominas   = c(1991L, 2008L, 2024L),
-  guaviare      = c(1991L, 2016L, 2024L),
-  madre_de_dios = c(1991L, 2010L, 2024L)
+  cotriguacu    = c(1990L, 2008L, 2023L),
+  paragominas   = c(1990L, 2008L, 2023L),
+  guaviare      = c(1990L, 2016L, 2023L),
+  madre_de_dios = c(1990L, 2010L, 2023L)
 )
 
 TERRITORIES <- names(STAGE_YEARS)

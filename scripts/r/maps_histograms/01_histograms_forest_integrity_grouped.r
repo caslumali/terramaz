@@ -174,6 +174,7 @@ load_histogram_csv <- function(csv_path) {
     mutate(
       # recodificação: arredonda sempre para o "dezenal superior"
       score_grouped = case_when(
+        macroclass == 10 & score %in% c(91, 94) ~ 94,
         macroclass %in% c(20, 30) ~ ceiling(score / 10) * 10,
         TRUE ~ score
       )
@@ -213,7 +214,7 @@ for (LANG in LANGS) {
     
     # Input/output dirs
     INPUT_DIR  <- file.path("results/metrics", TERRITORY)
-    OUTPUT_DIR <- file.path("results/maps/hist/forest_integrity_grouped")
+    OUTPUT_DIR <- file.path("results/maps/histograms/forest_integrity_grouped")
     if (!dir.exists(OUTPUT_DIR)) dir.create(OUTPUT_DIR, recursive = TRUE)
     
     # Locate CSV
@@ -286,7 +287,10 @@ for (LANG in LANGS) {
       scale_x_discrete(expand = c(0, 0), drop = FALSE) +  # zero padding, keep all levels
       labs(y = label("y_area_pct"), x = NULL) +
       theme_histogram_base() +
-      theme(axis.text.x = element_blank())
+      theme(
+        axis.text.x = element_blank(),
+        axis.text.y = element_text(size = if (TERRITORY == "cotriguacu") 8 else 5)
+      )
 
     print(p)
     message(glue("✓ Histogram generated for {TERRITORY}"))

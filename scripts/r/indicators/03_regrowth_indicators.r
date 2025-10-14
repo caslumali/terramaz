@@ -700,10 +700,7 @@ for (LANG in LANGS) {
       scale_fill_manual(
         values = cols,
         breaks = present_sources,
-        guide = guide_legend(
-          title = NULL
-          # override.aes = list(shape = 22, size = 2)
-        )
+        guide = "none"
       ) +
       axis_x_years_all(plot_min, plot_max) +
       axis_y_ha_auto(max(df_plot$area_ha, na.rm = TRUE)) +

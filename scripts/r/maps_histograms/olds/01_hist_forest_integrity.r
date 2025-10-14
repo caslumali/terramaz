@@ -230,7 +230,7 @@ for (LANG in LANGS) {
     
     # Input/output dirs
     INPUT_DIR  <- file.path("results/metrics", TERRITORY)
-    OUTPUT_DIR <- file.path("results/maps/hist/forest_integrity")
+    OUTPUT_DIR <- file.path("results/maps/histograms/forest_integrity")
     if (!dir.exists(OUTPUT_DIR)) dir.create(OUTPUT_DIR, recursive = TRUE)
     
     # Locate CSV
