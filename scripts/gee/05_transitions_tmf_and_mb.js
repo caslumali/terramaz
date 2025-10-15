@@ -1,303 +1,290 @@
 //============================================================================================
-// 0) SCRIPT OVERVIEW
+// TerrAmaz — Sankey Transitions (TMF + MapBiomas Amazonia C6)
 //============================================================================================
 /**
- * Title: TerrAmaz — Annual Sankey Exporter (TMF + MapBiomas Amazonia C6)
- * Purpose: Export per-region CSVs with year→year land-cover transitions (flows) to build Sankey.
- * Author: Lucas Lima
+ * Purpose
+ * -------
+ * Export, por território, as transições entre classes para os pares de anos
+ * específicos usados nos gráficos Sankey (ex.: 1991 → 2008 → 2024).
  *
- * OUTPUT:
- *   - One CSV per input zone (ROIS) + optional ALL_ROIS merged CSV.
- *   - One row per transition pair Y→Y+1 in 1990→1991 … 2022→2023.
- *   - Columns:
- *       area_id, year_from, year_to,
- *       from_code, to_code, from_name, to_name,
- *       area_ha
+ * Saída
+ * -----
+ * Um CSV por território contendo linhas:
+ *   area_id, year_from, year_to, src, dst, src_label, dst_label, px_total, area_ha
  *
- * 13-CLASS LEGEND (codes):
- *   1–3  Terra Firme (Undisturbed, Degraded, Regrowth)
- *   4–6  Flooded Forest (Undisturbed, Degraded, Regrowth)
- *   7    Natural Non-Forest
- *   8    Pasture
- *   9    Mosaic/Agriculture (incl. perennials, oil palm)
- *   10   Mining
- *   11   Urban
- *   12   Others (anthropic/non-veg catch-all)
- *   13   Rivers/Lakes
- *
- * DATA SOURCES:
- *   - TMF Annual Changes v2024 (bands Dec1990..Dec2024): use classes 1=Undisturbed, 2=Degraded, 4=Regrowth.
- *   - MapBiomas Amazonia Collection 6 (integration v1, per-year to 2023):
- *       TF/FF split and non-forest buckets (Pasture, Mosaic/Agric, Urban, Mining, Others, Water, Natural NF).
- *
- * METHOD (per year Y):
- *   1) Build class map (codes 1..13) from TMF DecY (forest condition U/D/R) × MB(Y) masks (TF vs FF and non-forest).
- *   2) For each pair Y→Y+1, intersect class(Y) × class(Y+1) and sum area (ha) by (from_code, to_code) within each ROI.
- *   3) Export rows with names via lookup table.
- *
- * NOTES:
- *   - Transition range ends at 2023 because MB Amazonia C6 ends in 2023.
- *   - Areas computed on each image’s native projection; NA/missing years remain masked (not exported).
+ * Notas
+ * -----
+ * - TMF (DecYYYY) cobre até 2024. MapBiomas Amazônia C6 vai até 2023, então os
+ *   anos acima de 2023 reutilizam a classificação de 2023 para categorias não
+ *   florestais.
+ * - As combinações de anos são definidas em STAGE_YEARS (por território).
  */
 
-
 //============================================================================================
-// 1) CONFIG
+// 1) CONFIGURATION
 //============================================================================================
-var YEAR_START   = 1990;
-var YEAR_END     = 2023;   // inclusive (flows are YEAR→YEAR+1 up to 2023)
-var MAX_PIXELS   = 1e13;
+var YEAR_START = 1990;
+var MB_LAST_YEAR = 2023;
+var MAX_PIXELS = 1e13;
 
-var ROIS = ee.FeatureCollection('projects/terramaz/assets/bases/zones_terramaz');
+var STAGE_YEARS = ee.Dictionary({
+  cotriguacu: ee.List([1990, 2008, 2023]),
+  paragominas: ee.List([1990, 2008, 2023]),
+  guaviare: ee.List([1990, 2016, 2023]),
+  madre_de_dios: ee.List([1990, 2010, 2023])
+});
 
-var TMF_ACC = ee.Image('projects/JRC/TMF/v1_2024/AnnualChanges/SAM'); // Dec1990..Dec2024
-var MB_AMZ      = ee.Image('projects/mapbiomas-public/assets/amazon/lulc/collection6/mapbiomas_collection60_integration_v1');
+var ROIS   = ee.FeatureCollection('projects/terramaz/assets/bases/zones_terramaz');
+var TMF_ACC = ee.Image('projects/JRC/TMF/v1_2024/AnnualChanges/SAM'); // bandas DecYYYY
+var MB_AMZ  = ee.Image('projects/mapbiomas-public/assets/amazon/lulc/collection6/mapbiomas_collection60_integration_v1');
 var MB_PROJ = MB_AMZ.projection();
 
 //============================================================================================
-// 2) CLASS LISTS (MapBiomas Amazonia C6)
+// 2) CLASS LISTS (MapBiomas)
 //============================================================================================
-// Forest types in MB (to split TF vs FF)
 var MB_FOREST_TF = ee.List([3, 4]);
 var MB_FOREST_FF = ee.List([6, 5]);
-
-// Natural Non-Forest
 var MB_NATURAL_NF = ee.List([11,12,13,29,68]);
-
-// Water
 var MB_WATER = ee.List([33, 34]);
-
-// Anthropic buckets
 var MB_PASTURE   = ee.List([15]);
-var MB_MOSAIC_AG = ee.List([9,18,21,35]);
+var MB_MOSAIC = ee.List([9]);
+var MB_AGRICULTURE = ee.List([18,21,35]);
 var MB_URBAN     = ee.List([24]);
 var MB_MINING    = ee.List([30]);
+var MB_OTHERS    = ee.List([23, 25]);
 
-// Others (catch-all anthro/non-veg)
-var MB_OTHERS = ee.List([23, 25]);
+var MB_OTHER_LULC = MB_URBAN.cat(MB_OTHERS).cat(MB_WATER);
+var MB_PREV_CONVERSION = MB_MOSAIC
+  .cat(MB_AGRICULTURE)
+  .cat(MB_PASTURE)
+  .cat(MB_URBAN)
+  .cat(MB_OTHERS)
+  .cat(MB_MINING)
+  .cat(MB_WATER);
 
-//============================================================================================
-// 3) HELPERS
-//============================================================================================
-function isOneOf(img, codes) {
-  codes = ee.List(codes);
-  var first = ee.Number(codes.get(0));
-  var mask  = img.eq(first);
-  var rest  = codes.slice(1);
-  return ee.Image(rest.iterate(function(c, acc){
-    return ee.Image(acc).or(img.eq(ee.Number(c)));
-  }, mask));
-}
-
-// MB band by year (returns fully masked if band missing)
-function mbBand(y) {
-  var b = ee.String('classification_').cat(ee.Number(y).format('%d'));
-  var has = MB_AMZ.bandNames().indexOf(b).gte(0);
-  return ee.Image(ee.Algorithms.If(has, MB_AMZ.select(b), ee.Image(0).updateMask(ee.Image(0))));
-}
-
-// Area reducer (ha) — sums masked pixels area in region
-function reduceAreaHa(mask, region){
-  var b   = ee.String(mask.bandNames().get(0));
-  var PRJ = mask.projection();
-  var ha  = ee.Image.pixelArea().reproject(PRJ).divide(10000);
-  var sum = mask.multiply(ha).reduceRegion({
-    reducer: ee.Reducer.sum(),
-    geometry: region,
-    crs: PRJ.crs(),
-    scale: PRJ.nominalScale(),
-    maxPixels: MAX_PIXELS,
-    tileScale: 2
-  }).get(b);
-  return ee.Number(sum);
-}
-
-// Class names dictionary
 var CLASS_DICT = ee.Dictionary({
   '1':'Undisturbed TF',
   '2':'Degraded TF',
   '3':'Regrowth TF',
   '4':'Undisturbed FF',
   '5':'Degraded FF',
-  '6':'Regrowth FF',
-  '7':'Natural NF',
-  '8':'Pasture',
-  '9':'Agriculture',
- '10':'Mining',
- '11':'Urban',
- '12':'Others',
- '13':'Water'
+'6':'Regrowth FF',
+'7':'Other natural vegetation',
+'8':'Agriculture',
+'9':'Pasture',
+'10':'Mining',
+'11':'Other LULC',
+'12':'Mosaic of uses'
 });
 
 //============================================================================================
-// 4) PER-YEAR CLASS MAP (1..13) — TMF DecY + MB Y
+// 3) HELPERS
 //============================================================================================
-function tmfBand(y){
-  return TMF_ACC.select(ee.String('Dec').cat(ee.Number(y).format('%d')))
+function isOneOf(image, codes) {
+  codes = ee.List(codes);
+  var first = ee.Number(codes.get(0));
+  var mask  = image.eq(first);
+  var rest  = codes.slice(1);
+  return ee.Image(rest.iterate(function(c, acc){
+    return ee.Image(acc).or(image.eq(ee.Number(c)));
+  }, mask));
+}
+
+function mbBand(year) {
+  var y = ee.Number(year).min(MB_LAST_YEAR);
+  var band = ee.String('classification_').cat(y.format('%d'));
+  var hasBand = MB_AMZ.bandNames().indexOf(band).gte(0);
+  return ee.Image(ee.Algorithms.If(hasBand, MB_AMZ.select(band), ee.Image(0).updateMask(ee.Image(0))));
+}
+
+function tmfBand(year){
+  return TMF_ACC.select(ee.String('Dec').cat(ee.Number(year).format('%d')))
                 .reproject(TMF_ACC.projection());
 }
 
-function classImage(y){
-  var TMF = tmfBand(y);
-  var TMF_UND = TMF.eq(1).selfMask();
-  var TMF_DEG = TMF.eq(2).selfMask();
-  var TMF_REG = TMF.eq(4).selfMask();
+//============================================================================================
+// 4) CLASS MAP POR ANO (codes 1..11)
+//============================================================================================
+function classImage(year){
+  year = ee.Number(year);
+  var TMF = tmfBand(year);
+  var MBY = mbBand(year).reproject(MB_PROJ);
 
-  var MBY = mbBand(y).reproject(MB_PROJ);
+  var TMF_UND = TMF.eq(1);
+  var TMF_DEG = TMF.eq(2);
+  var TMF_REG = TMF.eq(4);
 
-  var MB_FF    = isOneOf(MBY, MB_FOREST_FF).selfMask();
-  var MB_TF    = isOneOf(MBY, MB_FOREST_TF).selfMask();
-  var MB_natNF = isOneOf(MBY, MB_NATURAL_NF).selfMask();
-  var MB_water = isOneOf(MBY, MB_WATER).selfMask();
-  var MB_past  = isOneOf(MBY, MB_PASTURE).selfMask();
-  var MB_mosag = isOneOf(MBY, MB_MOSAIC_AG).selfMask();
-  var MB_urban = isOneOf(MBY, MB_URBAN).selfMask();
-  var MB_mining= isOneOf(MBY, MB_MINING).selfMask();
-  var MB_others= isOneOf(MBY, MB_OTHERS).selfMask();
+  var MB_TF    = isOneOf(MBY, MB_FOREST_TF).gt(0);
+  var MB_FF    = isOneOf(MBY, MB_FOREST_FF).gt(0);
+  var MB_natNF = isOneOf(MBY, MB_NATURAL_NF).gt(0);
+  var MB_agri  = isOneOf(MBY, MB_AGRICULTURE).gt(0);
+  var MB_past  = isOneOf(MBY, MB_PASTURE).gt(0);
+  var MB_mining= isOneOf(MBY, MB_MINING).gt(0);
+  var MB_other = isOneOf(MBY, MB_OTHER_LULC).gt(0);
+  var MB_mosaic= isOneOf(MBY, MB_MOSAIC).gt(0);
 
-  var UND_TF = TMF_UND.updateMask(MB_TF);
-  var DEG_TF = TMF_DEG.updateMask(MB_TF);
-  var REG_TF = TMF_REG.updateMask(MB_TF);
+  var MB_prev = ee.Image(ee.Algorithms.If(
+    year.gt(YEAR_START),
+    mbBand(year.subtract(1)).reproject(MB_PROJ),
+    ee.Image(0).updateMask(ee.Image(0))
+  ));
+  var MB_prev_conversion = isOneOf(MB_prev, MB_PREV_CONVERSION).gt(0);
 
-  var UND_FF = TMF_UND.updateMask(MB_FF);
-  var DEG_FF = TMF_DEG.updateMask(MB_FF);
-  var REG_FF = TMF_REG.updateMask(MB_FF);
+  var img = ee.Image(0);
 
-  var img = ee.Image(0)
-    .where(UND_TF,    1)
-    .where(DEG_TF,    2)
-    .where(REG_TF,    3)
-    .where(UND_FF,    4)
-    .where(DEG_FF,    5)
-    .where(REG_FF,    6)
-    .where(MB_natNF,  7)
-    .where(MB_past,   8)
-    .where(MB_mosag,  9)
-    .where(MB_mining, 10)
-    .where(MB_urban,  11)
-    .where(MB_others, 12)
-    .where(MB_water,  13)
-    .updateMask(ee.Image(1))
-    
-    return img
-      .updateMask(img.neq(0))
-      .rename(ee.String('class_').cat(ee.Number(y).format('%d'))) 
-      .reproject(TMF_ACC.projection());   
+  img = img.where(TMF_UND.and(MB_TF), 1)
+           .where(TMF_DEG.and(MB_TF), 2)
+           .where(TMF_REG.and(MB_TF), 3)
+           .where(TMF_UND.and(MB_FF), 4)
+           .where(TMF_DEG.and(MB_FF), 5)
+           .where(TMF_REG.and(MB_FF), 6);
+
+  var assigned = img.neq(0);
+  var forestTF_left = MB_TF.and(assigned.not());
+  var forestFF_left = MB_FF.and(assigned.not());
+
+  img = img.where(forestTF_left.and(MB_prev_conversion), 3)
+           .where(forestFF_left.and(MB_prev_conversion), 6);
+
+  assigned = img.neq(0);
+  img = img.where(MB_TF.and(assigned.not()), 2)
+           .where(MB_FF.and(assigned.not()), 5);
+
+  assigned = img.neq(0);
+  img = img.where(MB_agri.and(assigned.not()), 8);
+
+  assigned = img.neq(0);
+  img = img.where(MB_past.and(assigned.not()), 9);
+
+  assigned = img.neq(0);
+  img = img.where(MB_natNF.and(assigned.not()), 7);
+
+  assigned = img.neq(0);
+  img = img.where(MB_mining.and(assigned.not()), 10);
+
+  assigned = img.neq(0);
+  img = img.where(MB_mosaic.and(assigned.not()), 12);
+
+  assigned = img.neq(0);
+  img = img.where(MB_other.and(assigned.not()), 11);
+
+  img = img.where(img.eq(0), 11);
+
+  return img.toInt16()
+    .rename(ee.String('class_').cat(year.format('%d')))
+    .reproject(TMF_ACC.projection());
 }
 
-
 //============================================================================================
-// 5) TRANSITIONS year→year+1 PER ROI (area ha)
+// 5) TRANSITIONS PARA UM PAR DE ANOS
 //============================================================================================
-var YEARS = ee.List.sequence(YEAR_START, YEAR_END);
-var PAIRS = ee.List.sequence(YEAR_START, YEAR_END - 1);
+function transitionsForPair(yearFrom, yearTo, region, areaId){
+  var y0 = ee.Number(yearFrom);
+  var y1 = ee.Number(yearTo);
 
-// sum(ha) grouped by “pair code” (from*100 + to)
-function transitionsForYears(y0, y1, region, areaId){
-  y0 = ee.Number(y0); y1 = ee.Number(y1);
   var img0 = classImage(y0);
   var img1 = classImage(y1).reproject(img0.projection());
 
-  var pair = img0.multiply(100).add(img1).rename('pair'); // 101..1313
+  var pair = img0.multiply(100).add(img1).rename('pair');
   var PRJ  = img0.projection();
 
-  var ha   = ee.Image.pixelArea().reproject(PRJ).divide(10000).rename('ha');
-  var ones = ee.Image.constant(1).rename('ones').updateMask(pair.mask());
+  var ha = ee.Image.pixelArea().reproject(PRJ).divide(10000).rename('ha');
+  var ones = ee.Image.constant(1).updateMask(pair.mask()).rename('ones');
 
   var imgHa = ee.Image.cat([ha, pair]);
   var imgPx = ee.Image.cat([ones, pair]);
 
-  var groupsHa = imgHa.reduceRegion({
+  var rawHa = imgHa.reduceRegion({
     reducer: ee.Reducer.sum().group({groupField: 1, groupName: 'pair'}),
-    geometry: region, crs: PRJ.crs(), scale: PRJ.nominalScale(),
-    maxPixels: MAX_PIXELS, tileScale: 2
+    geometry: region,
+    crs: PRJ.crs(),
+    scale: PRJ.nominalScale(),
+    maxPixels: MAX_PIXELS,
+    tileScale: 2
   }).get('groups');
+  var groupsHa = ee.List(ee.Algorithms.If(rawHa, rawHa, ee.List([])));
 
-  var groupsPx = imgPx.reduceRegion({
+  var rawPx = imgPx.reduceRegion({
     reducer: ee.Reducer.sum().group({groupField: 1, groupName: 'pair'}),
-    geometry: region, crs: PRJ.crs(), scale: PRJ.nominalScale(),
-    maxPixels: MAX_PIXELS, tileScale: 2
+    geometry: region,
+    crs: PRJ.crs(),
+    scale: PRJ.nominalScale(),
+    maxPixels: MAX_PIXELS,
+    tileScale: 2
   }).get('groups');
+  var groupsPx = ee.List(ee.Algorithms.If(rawPx, rawPx, ee.List([])));
 
-  var listHa = ee.List(ee.Algorithms.If(groupsHa, groupsHa, ee.List([])));
-  var listPx = ee.List(ee.Algorithms.If(groupsPx, groupsPx, ee.List([])));
+  var pxDict = ee.Dictionary(groupsPx.iterate(function(item, acc){
+    item = ee.Dictionary(item);
+    return ee.Dictionary(acc).set(item.get('pair'), item.get('sum'));
+  }, ee.Dictionary({})));
 
-  var pxDict = ee.Dictionary(
-    listPx.iterate(function(item, acc){
-      item = ee.Dictionary(item);
-      var k = item.get('pair');
-      var v = item.get('sum'); // not 'count'
-      return ee.Dictionary(acc).set(k, v);
-    }, ee.Dictionary({}))
-  );
-
-  var fc = ee.FeatureCollection(listHa.map(function(d){
-    d = ee.Dictionary(d);
-    var p   = ee.Number(d.get('pair'));
-    var ah  = ee.Number(d.get('sum'));
-    var px  = ee.Number(pxDict.get(p.format(), 0));
+  var fc = ee.FeatureCollection(groupsHa.map(function(item){
+    item = ee.Dictionary(item);
+    var p = ee.Number(item.get('pair'));
+    var area = ee.Number(item.get('sum'));
+    var px = ee.Number(pxDict.get(p.format(), 0));
 
     var from = p.divide(100).floor();
     var to   = p.mod(100);
 
     return ee.Feature(null, {
       area_id   : areaId,
-      year      : y1,
+      year_from : y0,
+      year_to   : y1,
       src       : from,
       dst       : to,
       src_label : ee.String(CLASS_DICT.get(from.format('%d'))),
       dst_label : ee.String(CLASS_DICT.get(to.format('%d'))),
       px_total  : px,
-      area_ha   : ah
+      area_ha   : area
     });
   }));
 
   return fc;
 }
 
+//============================================================================================
+// 6) TRANSITIONS POR TERRITÓRIO
+//============================================================================================
 function sankeyForROI(feat){
   feat = ee.Feature(feat);
-  var geom   = feat.geometry();
   var areaId = ee.String(feat.get('zone'));
-  var fcList = PAIRS.map(function(y0){
-    y0 = ee.Number(y0);
-    return transitionsForYears(y0, y0.add(1), geom, areaId);
-  });
-  return ee.FeatureCollection(fcList).flatten();
+  var years = ee.List(STAGE_YEARS.get(areaId));
+
+  return ee.Algorithms.If(
+    years,
+    (function(){
+      var geom = feat.geometry();
+      var fromYears = years.slice(0, years.length().subtract(1));
+      var toYears = years.slice(1);
+      var pairs = fromYears.zip(toYears);
+
+      var fcList = pairs.map(function(pair){
+        pair = ee.List(pair);
+        return transitionsForPair(ee.Number(pair.get(0)), ee.Number(pair.get(1)), geom, areaId);
+      });
+
+      return ee.FeatureCollection(fcList).flatten();
+    })(),
+    ee.FeatureCollection([])
+  );
 }
 
 //============================================================================================
-// 6) EXPORTS
+// 7) EXPORT
 //============================================================================================
-// One CSV per ROI with all annual transitions (1990→1991 … 2022→2023)
-ROIS.evaluate(function(fc){
-  var allFCs = [];
-  (fc.features || []).forEach(function(f){
-    var areaId = f.properties.zone;
-    var table  = sankeyForROI(ee.Feature(f));
-    allFCs.push(table);
+ROIS.evaluate(function(collection){
+  (collection.features || []).forEach(function(feature){
+    var areaId = feature.properties.zone;
+    var table = sankeyForROI(ee.Feature(feature));
     Export.table.toDrive({
       collection    : table,
-      description   : areaId + '_tmf_mb_transitions_1990_2023',
+      description   : areaId + '_tmf_mb_transitions_custom',
       folder        : areaId + '_Terramaz_metrics',
-      fileNamePrefix: areaId + '_tmf_mb_transitions_1990_2023',
+      fileNamePrefix: areaId + '_tmf_mb_transitions_custom',
       fileFormat    : 'CSV'
     });
-    print('✓ Sankey queued:', areaId);
+    print('⤳ Sankey export queued for', areaId);
   });
 });
-
-//============================================================================================
-// 7) OPTIONAL — QUICK MAP FOR A GIVEN YEAR
-//============================================================================================
-var y = 2023;
-Map.addLayer(classImage(y), {min:1, max:13, palette:[
-  '#1a7f1a','#7fbf3f','#d1f57a',  // 1..3  TF
-  '#145c3d','#4aa382','#9be3c3',  // 4..6  FF
-  '#c2e699',                      // 7    Natural NF
-  '#ffd37f','#ffb347',            // 8,9  Pasture, Mosaic/Agric
-  '#b2182b',                      // 10   Mining
-  '#d9d9d9',                      // 11   Urban
-  '#2166ac',                      // 12   Others
-  '#8c510a'                       // 13   Rivers/Lakes
-]}, 'Classes '+y, false);

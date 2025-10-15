@@ -92,6 +92,8 @@ var PROJ  = ee.Projection(CRS).atScale(SCALE);
 var EDGE_DISTANCE = 120;
 var BUFFER_PX = Math.max(1, Math.round(EDGE_DISTANCE / SCALE));   // ≈ 4 px (120/30)
 
+var DEBUG = false;
+
 //============================================================================================
 // 2) LOAD DATA
 //============================================================================================
@@ -99,9 +101,9 @@ var ROIS = ee.FeatureCollection(ROIS_PATH);
 var MSPA = ee.Image(MSPA_PATH);
 var TMF  = ee.Image(TMF_PATH);
 
-print('✓ ROIs:', ROIS, ROIS.size());
-print('✓ MSPA bands:', MSPA, MSPA.projection(), MSPA.bandNames());
-print('✓ TMF band(s):',TMF, TMF.projection(), TMF.bandNames());
+// print('✓ ROIs:', ROIS, ROIS.size());
+// print('✓ MSPA bands:', MSPA, MSPA.projection(), MSPA.bandNames());
+// print('✓ TMF band(s):',TMF, TMF.projection(), TMF.bandNames());
 
 //============================================================================================
 // 3) HELPER: Simple RGB→hex for palettes
@@ -372,81 +374,82 @@ roiList.forEach(function (roiDict) {
 //============================================================================================
 // 8) Quick QA — On-map visualization (optional)
 //============================================================================================
-Map.addLayer(score_reg.updateMask(score_reg.gt(0)).clip(ROIS), vizREG,'Regrowth (0–1)', false);
-Map.addLayer(score_deg.updateMask(score_deg.gt(0)).clip(ROIS), vizDEG,'Degraded (0–1)', false);
-Map.addLayer(score_und.updateMask(score_und.gt(0)).clip(ROIS), vizUND, 'Undisturbed (0–1)', false );
-Map.addLayer(macroclassBand.clip(ROIS), {min:10, max:30, palette:['darkgreen','lightgreen','yellow']}, 'macroclass (10/20/30)', false)
+if (DEBUG) {
+  Map.addLayer(score_reg.updateMask(score_reg.gt(0)).clip(ROIS), vizREG,'Regrowth (0–1)', false);
+  Map.addLayer(score_deg.updateMask(score_deg.gt(0)).clip(ROIS), vizDEG,'Degraded (0–1)', false);
+  Map.addLayer(score_und.updateMask(score_und.gt(0)).clip(ROIS), vizUND, 'Undisturbed (0–1)', false );
+  Map.addLayer(macroclassBand.clip(ROIS), {min:10, max:30, palette:['darkgreen','lightgreen','yellow']}, 'macroclass (10/20/30)', false)
 
-
-//============================================================================================
-// 9) SHOW TMF SubTypes and MSPA raster
-//============================================================================================
-var TransitionMap = ee.Image('projects/JRC/TMF/v1_2024/TransitionMap_Subtypes/SAM');
-Map.addLayer(
-  TransitionMap.updateMask(TransitionMap),
-  {min:10, max:94, palette: vizTRANSITIONS},
-  'JRC - Transition Map – Sub types - v1 2024',
-  false
-);
-
-//============================================================================================
-// 10) MSPA Visualization — palette + legend (UI)
-//============================================================================================
-/**
- * Display MSPA (IntExt=1) with a clear palette and a compact legend.
- * Codes in your raster: Core=17; Islet=9; Perforation=105; Edge=3; Loop=169; Bridge=33; Branch=1
- * Background=2 and Missing=0 are masked out.
- */
-
-// -- 11.1 Build a display image that remaps MSPA codes to 1..7 for palette indexing
-var mspa_class = ee.Image.constant(0)
-  .where(MSPA.eq(17), 1)  // Core
-  .where(MSPA.eq(9), 2)   // Islet
-  .where(MSPA.eq(105), 3) // Perforation
-  .where(MSPA.eq(3), 4)   // Edge
-  .where(MSPA.eq(169), 5) // Loop
-  .where(MSPA.eq(33), 6)  // Bridge
-  .where(MSPA.eq(1), 7);  // Branch
-
-// -- 11.3 Add MSPA layer (turned off by default for a clean map toggle)
-Map.addLayer(mspa_class.updateMask(mspa_class).clip(ROIS),{min: 0, max: 7, palette: vizMSPA, opacity: 0.6}, 'MSPA', true);
-
-// -- 11.4 Compact legend (UI) for MSPA
-var legendMspa = ui.Panel({style: {position: 'bottom-left', padding: '8px'}});
-legendMspa.add(ui.Label({
-  value: 'MSPA (IntExt=1)',
-  style: {fontWeight: 'bold', fontSize: '12px', margin: '0 0 6px 0'}
-}));
-
-// Helper to add a legend row
-function addLegendRow(color, name) {
-  var colorBox = ui.Label({
-    style: {backgroundColor: '#' + color, padding: '8px', margin: '0 6px 4px 0'}
-  });
-  var desc = ui.Label({value: name, style: {fontSize: '12px'}});
-  legendMspa.add(ui.Panel([colorBox, desc], ui.Panel.Layout.Flow('horizontal'), {margin: '0 0 2px 0'}));
+  //============================================================================================
+  // 9) SHOW TMF SubTypes and MSPA raster
+  //============================================================================================
+  var TransitionMap = ee.Image('projects/JRC/TMF/v1_2024/TransitionMap_Subtypes/SAM');
+  Map.addLayer(
+    TransitionMap.updateMask(TransitionMap),
+    {min:10, max:94, palette: vizTRANSITIONS},
+    'JRC - Transition Map – Sub types - v1 2024',
+    false
+  );
+  
+  //============================================================================================
+  // 10) MSPA Visualization — palette + legend (UI)
+  //============================================================================================
+  /**
+   * Display MSPA (IntExt=1) with a clear palette and a compact legend.
+   * Codes in your raster: Core=17; Islet=9; Perforation=105; Edge=3; Loop=169; Bridge=33; Branch=1
+   * Background=2 and Missing=0 are masked out.
+   */
+  
+  // -- 11.1 Build a display image that remaps MSPA codes to 1..7 for palette indexing
+  var mspa_class = ee.Image.constant(0)
+    .where(MSPA.eq(17), 1)  // Core
+    .where(MSPA.eq(9), 2)   // Islet
+    .where(MSPA.eq(105), 3) // Perforation
+    .where(MSPA.eq(3), 4)   // Edge
+    .where(MSPA.eq(169), 5) // Loop
+    .where(MSPA.eq(33), 6)  // Bridge
+    .where(MSPA.eq(1), 7);  // Branch
+  
+  // -- 11.3 Add MSPA layer (turned off by default for a clean map toggle)
+  Map.addLayer(mspa_class.updateMask(mspa_class).clip(ROIS),{min: 0, max: 7, palette: vizMSPA, opacity: 0.6}, 'MSPA', true);
+  
+  // -- 11.4 Compact legend (UI) for MSPA
+  var legendMspa = ui.Panel({style: {position: 'bottom-left', padding: '8px'}});
+  legendMspa.add(ui.Label({
+    value: 'MSPA (IntExt=1)',
+    style: {fontWeight: 'bold', fontSize: '12px', margin: '0 0 6px 0'}
+  }));
+  
+  // Helper to add a legend row
+  function addLegendRow(color, name) {
+    var colorBox = ui.Label({
+      style: {backgroundColor: '#' + color, padding: '8px', margin: '0 6px 4px 0'}
+    });
+    var desc = ui.Label({value: name, style: {fontSize: '12px'}});
+    legendMspa.add(ui.Panel([colorBox, desc], ui.Panel.Layout.Flow('horizontal'), {margin: '0 0 2px 0'}));
+  }
+  
+  // Entries (order consistent with palette indexing above)
+  addLegendRow(rgb(0, 204, 0),   'Core (17)');
+  addLegendRow(rgb(204, 102, 0), 'Islet (9)');
+  addLegendRow(rgb(0, 0, 255),   'Perforation (105)');
+  addLegendRow(rgb(255, 0, 0),   'Edge (3)');
+  addLegendRow(rgb(255, 255, 0), 'Loop (169)');
+  addLegendRow(rgb(255, 0, 0),   'Bridge (33)');
+  addLegendRow(rgb(255, 178, 102),'Branch (1)');
+  
+  Map.add(legendMspa);
+  
+  var styledROIS = ROIS.style({color: '000000', fillColor: '00000000', width: 2});
+  
+  Map.addLayer(styledROIS, {}, 'TerrAmaz');
+  
+  Map.addLayer(distToPerfLoop.updateMask(distToPerfLoop), {palette:['red'],opacity: 0.5}, 'buffer perfLoop zone');
+  Map.addLayer(distToEdge.updateMask(distToEdge), {palette:['orange'], opacity: 0.5}, 'buffer perfEdge zone');
+  Map.addLayer(perfLoopDist, {min:0, max: 200}, 'perfLoopDist (m)', false);
+  
+  
+  // Map.centerObject(paragominas, 9);
+  // Map.centerObject(ROIS, 5);
+  // Map.setCenter(-58.7206, -9.4434, 9)
 }
-
-// Entries (order consistent with palette indexing above)
-addLegendRow(rgb(0, 204, 0),   'Core (17)');
-addLegendRow(rgb(204, 102, 0), 'Islet (9)');
-addLegendRow(rgb(0, 0, 255),   'Perforation (105)');
-addLegendRow(rgb(255, 0, 0),   'Edge (3)');
-addLegendRow(rgb(255, 255, 0), 'Loop (169)');
-addLegendRow(rgb(255, 0, 0),   'Bridge (33)');
-addLegendRow(rgb(255, 178, 102),'Branch (1)');
-
-Map.add(legendMspa);
-
-var styledROIS = ROIS.style({color: '000000', fillColor: '00000000', width: 2});
-
-Map.addLayer(styledROIS, {}, 'TerrAmaz');
-
-Map.addLayer(distToPerfLoop.updateMask(distToPerfLoop), {palette:['red'],opacity: 0.5}, 'buffer perfLoop zone');
-Map.addLayer(distToEdge.updateMask(distToEdge), {palette:['orange'], opacity: 0.5}, 'buffer perfEdge zone');
-Map.addLayer(perfLoopDist, {min:0, max: 200}, 'perfLoopDist (m)', false);
-
-
-// Map.centerObject(paragominas, 9);
-// Map.centerObject(ROIS, 5);
-// Map.setCenter(-58.7206, -9.4434, 9)
