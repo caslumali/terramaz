@@ -40,7 +40,7 @@ DPI           <- 300
 
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
-LANGS <- c("fr")   # "pt" | "es" | "fr" | "en"
+LANGS <- c("fr", "es", "pt", "en")   # "pt" | "es" | "fr" | "en"
 
 LABELS <- list(
   # Axes
@@ -90,7 +90,8 @@ score_colors <- c(
   # Macroclass 30 (Regrowth)
   "30_100" = "#810f7c",  # cor original do 100
   "30_90"  = "#8a73b5",  # cor original do 90
-  "30_80"  = "#afc8e0"  # cor original do 80
+  "30_80"  = "#afc8e0",  # cor original do 80
+
 )
 
 
@@ -102,7 +103,7 @@ theme_histogram_base <- function() {
 theme_minimal(base_size = 12) +
   theme(
     axis.text.y        = element_text(size = 5),
-    axis.title.y       = element_text(size = 6, margin = margin(r = 4)), 
+    axis.title.y       = element_text(size = 6, margin = margin(r = 4), color = "#6a6a6aff"),
     axis.text.x        = element_blank(),
     axis.ticks.x       = element_blank(),
     axis.title.x       = element_blank(),
@@ -288,8 +289,9 @@ for (LANG in LANGS) {
       labs(y = label("y_area_pct"), x = NULL) +
       theme_histogram_base() +
       theme(
-        axis.text.x = element_blank(),
-        axis.text.y = element_text(size = if (TERRITORY == "cotriguacu") 8 else 5)
+        axis.text.x  = element_blank(),
+        axis.text.y  = element_text(size = if (TERRITORY == "cotriguacu") 7 else 5),
+        axis.title.y = element_text(size = if (TERRITORY == "cotriguacu") 9 else 6)
       )
 
     print(p)

@@ -15,8 +15,12 @@ suppressPackageStartupMessages({
   library(purrr)
 })
 
-LANGS        <- c("fr")
-# LANGS        <- c("fr", "es", "pt", "en")
+# Threshold to keep only globally relevant classes in the Sankey diagram
+MIN_SHARE <- 0.01
+
+# LANGS        <- c("fr")
+LANGS        <- c("fr", "es", "pt", "en")
+
 OUT_DIR      <- "results/indicators"
 METRICS_DIR  <- "results/metrics"
 FILENAME_TXT <- "{territory}_sankeymatic_{lang}.txt"
@@ -285,6 +289,50 @@ build_sankey_lines <- function(df, territory, lang) {
   defined_nodes <- character(0)
   data_lines <- list()
 
+  # Determine globally relevant classes for this territory
+  class_totals <- purrr::map_dfr(
+    seq_len(length(stages) - 1),
+    function(i) {
+      summarise_period(
+        df, territory,
+        year_start = stages[i],
+        year_end   = stages[i + 1],
+        forest_only = (i == 1)
+      )
+    }
+  )
+
+  if (nrow(class_totals) == 0) {
+    return(character(0))
+  }
+
+  class_totals <- class_totals %>%
+    mutate(
+      src_class = factor(src_class),
+      dst_class = factor(dst_class)
+    )
+
+  total_area <- sum(class_totals$area_ha, na.rm = TRUE)
+
+  class_shares <- bind_rows(
+    class_totals %>% transmute(class = src_class, area_ha),
+    class_totals %>% transmute(class = dst_class, area_ha)
+  ) %>%
+    group_by(class) %>%
+    summarise(area_ha = sum(area_ha, na.rm = TRUE), .groups = "drop") %>%
+    mutate(share = if (total_area > 0) area_ha / total_area else 0)
+
+  classes_to_keep <- class_shares %>%
+    filter(share >= MIN_SHARE) %>%
+    pull(class)
+
+  if (!length(classes_to_keep)) {
+    classes_to_keep <- class_shares %>%
+      arrange(desc(area_ha)) %>%
+      slice_head(n = 1) %>%
+      pull(class)
+  }
+
   for (i in seq_len(length(stages) - 1)) {
     year_from <- stages[i]
     year_to   <- stages[i + 1]
@@ -292,7 +340,8 @@ build_sankey_lines <- function(df, territory, lang) {
     flows <- summarise_period(
       df, territory, year_from, year_to,
       forest_only = (i == 1)
-    )
+    ) %>%
+      filter(src_class %in% classes_to_keep, dst_class %in% classes_to_keep)
 
     if (nrow(flows) == 0) {
       data_lines <- append(data_lines, list(glue("// {year_from} -> {year_to}: no data available"), ""))
