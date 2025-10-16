@@ -85,7 +85,7 @@ PLOT_YEAR_MAX <- 2024L
 
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
-# LANGS <- c("fr")  # "pt" | "es" | "fr" | "en"
+# LANGS <- c("es")  # "pt" | "es" | "fr" | "en"
 LANGS <- c("fr", "es", "pt", "en")
 
 LABELS <- list(
@@ -534,10 +534,6 @@ for (LANG in LANGS) {
 for (LANG in LANGS) {
   message(glue("🌐 Language: {LANG}"))
   for (TERRITORY in TERRITORIES) {
-
-    # Debug approach
-    TERRITORY <- "paragominas"
-    LANG <- "fr"
 
     cat("\n", paste(rep("=", 64), collapse=""), "\n", sep = "")
     cat(glue("PROCESSING: {toupper(TERRITORY)}"))
