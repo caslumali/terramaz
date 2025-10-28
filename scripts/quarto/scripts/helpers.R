@@ -6,7 +6,7 @@ suppressPackageStartupMessages({
 })
 
 DEFAULT_TERRITORIES <- c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
-DEFAULT_LANG_FALLBACK <- "en"
+DEFAULT_LANG_FALLBACK <- "fr"
 
 load_translation_bundle <- function(lang,
                                     path = file.path("config", "translations.yml"),
@@ -64,7 +64,10 @@ render_figure <- function(path, bundle = NULL, scale = 1.25) {
   }
   width_percent <- sprintf("%.0f%%", scale * 100)
   norm <- gsub("\\\\", "/", path)
-  cat(glue("![]({norm}){{width={width_percent}}}"), "\n\n", sep = "")
+  
+  cat("::: {custom-style=\"Image\"}\n", sep = "")
+  cat(glue("![]({norm}){{width={width_percent}}}"), "\n", sep = "")
+  cat(":::\n\n", sep = "")
 }
 
 resolve_locale_value <- function(node, lang, fallback) {

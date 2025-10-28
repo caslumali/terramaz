@@ -16,6 +16,7 @@ format:
     toc-depth: 2
     number-sections: true
     reference-doc: reference.docx
+    toc-title: "Table des matières" 
 
 params:
   lang: "fr"
