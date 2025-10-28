@@ -15,7 +15,6 @@
 *.stan
 *.exe
 *.ico
-*.yml 
 
 # Shapefiles and related files
 *.csv
@@ -40,13 +39,19 @@
 *.lot
 *.rels
 
-
 # Ignore specific documents
 desktop.ini
 chat.md
 explanation_Terramaz.md
 glad_gee_app.js
+reference.docx
+report_blueprint.md
 
+# Quarto files
+/scripts/quarto/.quarto
+/scripts/quarto/docx
+**/*.quarto_ipynb
+!reference.docx
 
 # Ignore folders
 /deforisk
@@ -54,5 +59,4 @@ glad_gee_app.js
 /docs
 /results
 /qgis
-/scripts/quarto
 __pycache__

@@ -1,0 +1,105 @@
+﻿---
+params:
+  lang: "fr"
+  territories:
+    - cotriguacu
+    - paragominas
+    - guaviare
+    - madre_de_dios
+---
+
+\newpage
+
+```{r setup}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, results = "asis")
+
+source("scripts/helpers.R")
+
+lang <- params$lang
+territories <- ensure_vector(params$territories)
+if (length(territories) == 0) territories <- DEFAULT_TERRITORIES
+
+bundle <- load_translation_bundle(lang)
+label_section <- function(key) tr(bundle, "sections", key)
+label_indicator <- function(...) tr(bundle, "indicators", ...)
+placeholder_text <- tr(bundle, "phrases", "placeholder")
+
+emit_line <- function(text) cat(text, "\n\n", sep = "")
+```
+
+```{r territories, results="asis"}
+for (i in seq_along(territories)) {
+  territory <- territories[[i]]
+  territory_name <- territory_label(bundle, territory)
+  if (i > 1) page_break()
+
+  write_heading(1, territory_name)
+
+  write_heading(2, label_indicator("deforestation", "title"))
+  emit_line(glue::glue("**{label_section('data')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('method')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('results')}** {placeholder_text}"))
+  render_figure(figure_path(territory, lang, glue::glue("01_{territory}_deforestation_{lang}.png")), bundle)
+
+  write_heading(2, label_indicator("degradation", "title"))
+  emit_line(glue::glue("**{label_section('data')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('method')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('results')}** {placeholder_text}"))
+  render_figure(figure_path(territory, lang, glue::glue("02_{territory}_degradation_{lang}.png")), bundle)
+
+  write_heading(2, label_indicator("regrowth", "title"))
+  emit_line(glue::glue("**{label_section('data')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('method')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('results')}**"))
+  emit_line(glue::glue("* *{label_indicator('regrowth', 'flow')}* - {placeholder_text}"))
+  render_figure(figure_path(territory, lang, glue::glue("03a_{territory}_regrowth_flow_tmf_mb_{lang}.png")), bundle)
+  emit_line(glue::glue("* *{label_indicator('regrowth', 'stock')}* - {placeholder_text}"))
+  render_figure(figure_path(territory, lang, glue::glue("03b_{territory}_regrowth_stock_mb_{lang}.png")), bundle)
+  emit_line(glue::glue("* *{label_indicator('regrowth', 'age')}* - {placeholder_text}"))
+  render_figure(figure_path(territory, lang, glue::glue("03c_{territory}_regrowth_age_mb_{lang}.png")), bundle)
+
+  write_heading(2, label_indicator("burned_forest", "title"))
+  emit_line(glue::glue("**{label_section('data')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('method')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('results')}** {placeholder_text}"))
+  render_figure(figure_path(territory, lang, glue::glue("04_{territory}_burned_fo_nf_dualaxis_{lang}.png")), bundle)
+
+  write_heading(2, label_indicator("temperature", "title"))
+  emit_line(glue::glue("**{label_section('data')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('method')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('results')}**"))
+  emit_line(glue::glue("* *{label_indicator('temperature', 'annual')}* - {placeholder_text}"))
+  render_figure(figure_path(territory, lang, glue::glue("05a_{territory}_temp_annual_{lang}.png")), bundle)
+  emit_line(glue::glue("* *{label_indicator('temperature', 'monthly')}* - {placeholder_text}"))
+  render_figure(figure_path(territory, lang, glue::glue("05b_{territory}_temp_monthly_{lang}.png")), bundle)
+
+  write_heading(2, label_indicator("precipitation", "title"))
+  emit_line(glue::glue("**{label_section('data')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('method')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('results')}**"))
+  emit_line(glue::glue("* *{label_indicator('precipitation', 'annual')}* - {placeholder_text}"))
+  render_figure(figure_path(territory, lang, glue::glue("06a_{territory}_precipitation_annual_{lang}.png")), bundle)
+  emit_line(glue::glue("* *{label_indicator('precipitation', 'monthly')}* - {placeholder_text}"))
+  render_figure(figure_path(territory, lang, glue::glue("06b_{territory}_precipitation_monthly_{lang}.png")), bundle)
+
+  write_heading(2, label_indicator("sankey", "title"))
+  emit_line(glue::glue("**{label_section('data')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('method')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('results')}** {placeholder_text}"))
+
+  write_heading(2, label_indicator("forest_state_map", "title"))
+  emit_line(glue::glue("**{label_section('data')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('method')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('results')}** {placeholder_text}"))
+
+  write_heading(2, label_indicator("fire_vulnerability_map", "title"))
+  emit_line(glue::glue("**{label_section('data')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('method')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('results')}** {placeholder_text}"))
+
+  write_heading(2, label_indicator("deforisk_map", "title"))
+  emit_line(glue::glue("**{label_section('data')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('method')}** {placeholder_text}"))
+  emit_line(glue::glue("**{label_section('results')}** {placeholder_text}"))
+}
+```
