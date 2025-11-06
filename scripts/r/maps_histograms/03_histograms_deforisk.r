@@ -35,14 +35,9 @@ PLOT_WIDTH  <- 250
 PLOT_HEIGHT <- 35
 OUTPUT_DIR <- file.path("results", "maps", "histograms", "deforisk_grouped")
 
-CLASS_DEFS <- tibble::tibble(
-  classe = factor(
-    c("Tres faible", "Faible", "Modere", "Eleve", "Tres eleve"),
-    levels = c("Tres faible", "Faible", "Modere", "Eleve", "Tres eleve")
-  ),
-  score_min = c(0.00, 0.20, 0.40, 0.60, 0.80),
-  score_max = c(0.19, 0.39, 0.59, 0.79, 1.00),
-  couleur   = c("#196e19", "#228b22", "#ffa500", "#e31a1c", "#000000")
+CLASS_NAMES <- factor(
+  c("Tres faible", "Faible", "Modere", "Eleve", "Tres eleve"),
+  levels = c("Tres faible", "Faible", "Modere", "Eleve", "Tres eleve")
 )
 
 FILENAME_METRICS <- "10_{territory}_deforisk_risk_classes.csv"
@@ -165,14 +160,26 @@ for (LANG in LANGS) {
     }
 
     pixel_area <- abs(prod(terra::res(rast))) / 10000  # ha
+    palette_vec <- if (TERRITORY %in% c("paragominas", "madre_de_dios")) {
+      c("#196e19", "#298b21", "#c9b00e", "#ffa107", "#e31a1c")
+    } else {
+      c("#196e19", "#228b22", "#ffa500", "#e31a1c", "#000000")
+    }
+
+    class_defs <- tibble::tibble(
+      classe = CLASS_NAMES,
+      score_min = c(0.00, 0.20, 0.40, 0.60, 0.80),
+      score_max = c(0.19, 0.39, 0.59, 0.79, 1.00),
+      couleur   = palette_vec
+    )
     values_norm <- normalize_risk(values)
 
     class_id <- cut(
       values_norm,
-      breaks = c(CLASS_DEFS$score_min, 1),
+      breaks = c(class_defs$score_min, 1),
       include.lowest = TRUE,
       right = TRUE,
-      labels = CLASS_DEFS$classe
+      labels = class_defs$classe
     )
 
     class_tbl <- tibble::tibble(
@@ -180,9 +187,9 @@ for (LANG in LANGS) {
     ) %>%
       count(Classe, name = "n_pixels") %>%
       mutate(
-        Classe = factor(Classe, levels = levels(CLASS_DEFS$classe)),
+        Classe = factor(Classe, levels = levels(CLASS_NAMES)),
         Score  = purrr::map_chr(Classe, function(cls) {
-          row <- CLASS_DEFS[CLASS_DEFS$classe == cls, ]
+          row <- class_defs[class_defs$classe == cls, ]
           score_label(row$score_min, row$score_max)
         }),
         surface_ha = n_pixels * pixel_area,
@@ -215,7 +222,7 @@ for (LANG in LANGS) {
 
     p <- ggplot(plot_tbl, aes(x = Classe, y = pct, fill = Classe)) +
       geom_col(width = 0.9, colour = NA) +
-      scale_fill_manual(values = setNames(CLASS_DEFS$couleur, CLASS_DEFS$classe)) +
+      scale_fill_manual(values = setNames(class_defs$couleur, class_defs$classe)) +
       scale_x_discrete(expand = c(0, 0)) +
       axis_y_percent(show_labels = TRUE) +
       labs(
