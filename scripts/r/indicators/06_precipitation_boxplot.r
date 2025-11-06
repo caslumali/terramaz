@@ -37,8 +37,12 @@ TERRITORY_LABELS <- c(
 )
 
 # File name stub and figure size
-FILENAME_ANUAL   <- "06a_{TERRITORY}_precipitation_annual_{LANG}"
-FILENAME_MONTHLY <- "06b_{TERRITORY}_precipitation_monthly_{LANG}"
+FILENAME_ANUAL            <- "06a_{TERRITORY}_precipitation_annual_{LANG}"
+FILENAME_MONTHLY          <- "06b_{TERRITORY}_precipitation_monthly_{LANG}"
+FILENAME_ANNUAL_OVERVIEW  <- "06a_{TERRITORY}_precipitation_annual_overview"
+FILENAME_ANNUAL_TRENDS    <- "06a_{TERRITORY}_precipitation_annual_trends"
+FILENAME_MONTHLY_OVERVIEW <- "06b_{TERRITORY}_precipitation_monthly_overview"
+FILENAME_MONTHLY_TRENDS   <- "06b_{TERRITORY}_precipitation_monthly_trends"
 
 FIG_WIDTH_MM     <- 431.8  # 17 in
 FIG_HEIGHT_MM    <- 220    # a bit taller for boxplots
@@ -262,6 +266,559 @@ detect_col <- function(nms, candidates_regex) {
   if (length(ix)) nms[ix[1]] else NA_character_
 }
 
+trend_slope <- function(x, y) {
+  valid <- is.finite(x) & is.finite(y)
+  if (sum(valid) < 2) return(NA_real_)
+  mod <- tryCatch(stats::lm(y[valid] ~ x[valid]), error = function(...) NULL)
+  if (is.null(mod)) return(NA_real_)
+  stats::coef(mod)[[2]]
+}
+
+format_fr_num <- function(x, digits = 0) {
+  ifelse(
+    is.na(x),
+    "",
+    format(
+      round(as.numeric(x), digits),
+      big.mark = " ",
+      decimal.mark = ",",
+      trim = TRUE,
+      scientific = FALSE,
+      nsmall = digits
+    )
+  )
+}
+
+format_fr_signed <- function(x, digits = 0) {
+  ifelse(
+    is.na(x),
+    "",
+    paste0(
+      ifelse(x > 0, "+", ifelse(x < 0, "-", "")),
+      format_fr_num(abs(x), digits = digits)
+    )
+  )
+}
+
+format_year_value <- function(year, value, digits = 0) {
+  out <- ifelse(
+    is.na(year) | is.na(value),
+    "",
+    paste0(year, " (", format_fr_num(value, digits = digits), ")")
+  )
+  as.character(out)
+}
+
+format_period_pair <- function(value1, value2, digits = 0) {
+  paste0(format_fr_num(value1, digits = digits), " / ", format_fr_num(value2, digits = digits))
+}
+
+build_precip_annual_tables <- function(df) {
+  if (is.null(df)) {
+    return(list(overview = tibble(), trends = tibble()))
+  }
+
+  df_clean <- df %>%
+    filter(!is.na(year), !is.na(precipitation_mm), !is.na(tmf_class_label)) %>%
+    mutate(
+      year = as.integer(year),
+      tmf_class_label = factor(tmf_class_label, levels = TMF_CLASS_LEVELS)
+    ) %>%
+    drop_na()
+
+  if (nrow(df_clean) == 0) {
+    return(list(overview = tibble(), trends = tibble()))
+  }
+
+  year_range_label <- glue::glue("{YEAR_MIN}-{YEAR_MAX}")
+  period1_end <- min(YEAR_MIN + 10, YEAR_MAX)
+  period2_start <- min(period1_end + 1, YEAR_MAX)
+  period1_years <- seq(YEAR_MIN, period1_end)
+  period2_years <- seq(period2_start, YEAR_MAX)
+  period1_label <- glue::glue("{YEAR_MIN}-{period1_end}")
+  period2_label <- glue::glue("{period2_start}-{YEAR_MAX}")
+
+  annual_medians <- df_clean %>%
+    group_by(tmf_class_label, year, .drop = FALSE) %>%
+    summarise(median_precip = median(precipitation_mm, na.rm = TRUE), .groups = "drop")
+
+  annual_diff <- annual_medians %>%
+    left_join(
+      annual_medians %>%
+        filter(tmf_class_label == "Undisturbed") %>%
+        select(year, undist_median = median_precip),
+      by = "year"
+    ) %>%
+    mutate(diff_vs_undist = median_precip - undist_median)
+
+  tmf_fr <- TMF_LABELS[["fr"]]
+
+  overview <- annual_medians %>%
+    group_by(tmf_class_label, .drop = FALSE) %>%
+    summarise(
+      median_all = median(median_precip, na.rm = TRUE),
+      amplitude_all = max(median_precip, na.rm = TRUE) - min(median_precip, na.rm = TRUE),
+      wettest_year = year[which.max(median_precip)],
+      wettest_median = max(median_precip, na.rm = TRUE),
+      driest_year = year[which.min(median_precip)],
+      driest_median = min(median_precip, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    left_join(
+      annual_diff %>%
+        group_by(tmf_class_label, .drop = FALSE) %>%
+        summarise(mean_diff_vs_undist = mean(diff_vs_undist, na.rm = TRUE), .groups = "drop"),
+      by = "tmf_class_label"
+    ) %>%
+    mutate(
+      couverture_fr = tmf_fr[tmf_class_label] %||% tmf_class_label,
+      wettest_label = format_year_value(wettest_year, wettest_median, digits = 0),
+      driest_label = format_year_value(driest_year, driest_median, digits = 0),
+      diff_label = dplyr::case_when(
+        tmf_class_label == "Undisturbed" ~ "—",
+        TRUE ~ format_fr_signed(mean_diff_vs_undist, digits = 0)
+      )
+    ) %>%
+    transmute(
+      Couverture = couverture_fr,
+      !!glue::glue("Précipitation médiane {year_range_label} (mm)") := format_fr_num(median_all, digits = 0),
+      !!glue::glue("Amplitude {year_range_label} (mm)") := format_fr_num(amplitude_all, digits = 0),
+      `Année la plus humide (mm)` = wettest_label,
+      `Année la plus sèche (mm)` = driest_label,
+      `Différence moyenne vs forêt non perturbée (mm)` = diff_label
+    )
+
+  annual_periods <- annual_medians %>%
+    mutate(
+      period = dplyr::case_when(
+        year %in% period1_years ~ period1_label,
+        year %in% period2_years ~ period2_label,
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    filter(!is.na(period))
+
+  trends <- annual_periods %>%
+    group_by(tmf_class_label, period, .drop = FALSE) %>%
+    summarise(median_period = median(median_precip, na.rm = TRUE), .groups = "drop") %>%
+    tidyr::pivot_wider(names_from = period, values_from = median_period) %>%
+    left_join(
+      annual_medians %>%
+        group_by(tmf_class_label, .drop = FALSE) %>%
+        summarise(trend_decade = trend_slope(year, median_precip) * 10, .groups = "drop"),
+      by = "tmf_class_label"
+    )
+
+  if (!(period1_label %in% names(trends))) trends[[period1_label]] <- NA_real_
+  if (!(period2_label %in% names(trends))) trends[[period2_label]] <- NA_real_
+
+  diff_period <- annual_periods %>%
+    left_join(
+      annual_periods %>%
+        filter(tmf_class_label == "Undisturbed") %>%
+        select(period, year, ref_median = median_precip),
+      by = c("period", "year")
+    ) %>%
+    mutate(diff_vs_undist = median_precip - ref_median) %>%
+    group_by(tmf_class_label, period, .drop = FALSE) %>%
+    summarise(mean_diff = mean(diff_vs_undist, na.rm = TRUE), .groups = "drop") %>%
+    tidyr::pivot_wider(names_from = period, values_from = mean_diff, names_glue = "diff_{period}")
+
+  if (!(glue::glue("diff_{period1_label}") %in% names(diff_period))) diff_period[[glue::glue("diff_{period1_label}")]] <- NA_real_
+  if (!(glue::glue("diff_{period2_label}") %in% names(diff_period))) diff_period[[glue::glue("diff_{period2_label}")]] <- NA_real_
+
+  trends <- trends %>%
+    left_join(diff_period, by = "tmf_class_label") %>%
+    mutate(
+      couverture_fr = tmf_fr[tmf_class_label] %||% tmf_class_label,
+      median_p1 = .[[period1_label]],
+      median_p2 = .[[period2_label]],
+      variation = median_p2 - median_p1,
+      diff_p1 = dplyr::case_when(
+        tmf_class_label == "Undisturbed" ~ 0,
+        TRUE ~ .[[glue::glue("diff_{period1_label}")]]
+      ),
+      diff_p2 = dplyr::case_when(
+        tmf_class_label == "Undisturbed" ~ 0,
+        TRUE ~ .[[glue::glue("diff_{period2_label}")]]
+      ),
+      diff_pair = dplyr::case_when(
+        tmf_class_label == "Undisturbed" ~ "— / —",
+        TRUE ~ format_period_pair(diff_p1, diff_p2, digits = 0)
+      )
+    ) %>%
+    transmute(
+      Couverture = couverture_fr,
+      !!glue::glue("Médiane {period1_label} (mm)") := format_fr_num(median_p1, digits = 0),
+      !!glue::glue("Médiane {period2_label} (mm)") := format_fr_num(median_p2, digits = 0),
+      `Variation (mm)` = format_fr_signed(variation, digits = 0),
+      `Tendance (mm par décennie)` = format_fr_signed(trend_decade, digits = 0),
+      !!glue::glue("Différence moyenne vs forêt non perturbée ({period1_label} / {period2_label}) (mm)") := diff_pair
+    )
+
+  list(overview = overview, trends = trends)
+}
+
+build_precip_monthly_tables <- function(df) {
+  if (is.null(df)) {
+    return(list(overview = tibble(), trends = tibble()))
+  }
+
+  df_clean <- df %>%
+    filter(!is.na(year), !is.na(month), !is.na(precipitation_mm), !is.na(tmf_class_label)) %>%
+    mutate(
+      year = as.integer(year),
+      month = as.integer(month),
+      tmf_class_label = factor(tmf_class_label, levels = TMF_CLASS_LEVELS)
+    ) %>%
+    drop_na()
+  }
+
+trend_slope <- function(x, y) {
+  valid <- is.finite(x) & is.finite(y)
+  if (sum(valid) < 2) return(NA_real_)
+  mod <- tryCatch(stats::lm(y[valid] ~ x[valid]), error = function(...) NULL)
+  if (is.null(mod)) return(NA_real_)
+  stats::coef(mod)[[2]]
+}
+
+format_fr_num <- function(x, digits = 0) {
+  ifelse(
+    is.na(x),
+    "",
+    format(
+      round(as.numeric(x), digits),
+      big.mark = " ",
+      decimal.mark = ",",
+      trim = TRUE,
+      scientific = FALSE,
+      nsmall = digits
+    )
+  )
+}
+
+format_fr_signed <- function(x, digits = 0) {
+  ifelse(
+    is.na(x),
+    "",
+    paste0(
+      ifelse(x > 0, "+", ifelse(x < 0, "-", "")),
+      format_fr_num(abs(x), digits = digits)
+    )
+  )
+}
+
+format_period_pair <- function(value1, value2, digits = 0) {
+  paste0(format_fr_num(value1, digits = digits), " / ", format_fr_num(value2, digits = digits))
+}
+
+build_precip_annual_tables <- function(df) {
+  if (is.null(df)) {
+    return(list(overview = tibble(), trends = tibble()))
+  }
+
+  df_clean <- df %>%
+    filter(!is.na(year), !is.na(precipitation_mm), !is.na(tmf_class_label)) %>%
+    mutate(
+      year = as.integer(year),
+      tmf_class_label = factor(tmf_class_label, levels = TMF_CLASS_LEVELS)
+    ) %>%
+    drop_na()
+
+  if (nrow(df_clean) == 0) {
+    return(list(overview = tibble(), trends = tibble()))
+  }
+
+  year_range_label <- glue::glue("{YEAR_MIN}-{YEAR_MAX}")
+  period1_end <- min(YEAR_MIN + 10, YEAR_MAX)
+  period2_start <- min(period1_end + 1, YEAR_MAX)
+  period1_years <- seq(YEAR_MIN, period1_end)
+  period2_years <- seq(period2_start, YEAR_MAX)
+  period1_label <- glue::glue("{YEAR_MIN}-{period1_end}")
+  period2_label <- glue::glue("{period2_start}-{YEAR_MAX}")
+
+  annual_medians <- df_clean %>%
+    group_by(tmf_class_label, year, .drop = FALSE) %>%
+    summarise(median_precip = median(precipitation_mm, na.rm = TRUE), .groups = "drop")
+
+  annual_diff <- annual_medians %>%
+    left_join(
+      annual_medians %>%
+        filter(tmf_class_label == "Undisturbed") %>%
+        select(year, undist_median = median_precip),
+      by = "year"
+    ) %>%
+    mutate(diff_vs_undist = median_precip - undist_median)
+
+  tmf_fr <- TMF_LABELS[["fr"]]
+
+  overview <- annual_medians %>%
+    group_by(tmf_class_label, .drop = FALSE) %>%
+    summarise(
+      median_all = median(median_precip, na.rm = TRUE),
+      amplitude_all = max(median_precip, na.rm = TRUE) - min(median_precip, na.rm = TRUE),
+      wettest_year = year[which.max(median_precip)],
+      wettest_median = max(median_precip, na.rm = TRUE),
+      driest_year = year[which.min(median_precip)],
+      driest_median = min(median_precip, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    left_join(
+      annual_diff %>%
+        group_by(tmf_class_label, .drop = FALSE) %>%
+        summarise(mean_diff_vs_undist = mean(diff_vs_undist, na.rm = TRUE), .groups = "drop"),
+      by = "tmf_class_label"
+    ) %>%
+    mutate(
+      couverture_fr = tmf_fr[tmf_class_label] %||% tmf_class_label,
+      wettest_label = format_year_value(wettest_year, wettest_median, digits = 0),
+      driest_label = format_year_value(driest_year, driest_median, digits = 0),
+      diff_label = dplyr::case_when(
+        tmf_class_label == "Undisturbed" ~ "—",
+        TRUE ~ format_fr_signed(mean_diff_vs_undist, digits = 0)
+      )
+    ) %>%
+    transmute(
+      Couverture = couverture_fr,
+      !!glue::glue("Précipitation médiane {year_range_label} (mm)") := format_fr_num(median_all, digits = 0),
+      !!glue::glue("Amplitude {year_range_label} (mm)") := format_fr_num(amplitude_all, digits = 0),
+      `Année la plus humide (mm)` = wettest_label,
+      `Année la plus sèche (mm)` = driest_label,
+      `Différence moyenne vs forêt non perturbée (mm)` = diff_label
+    )
+
+  annual_periods <- annual_medians %>%
+    mutate(
+      period = dplyr::case_when(
+        year %in% period1_years ~ period1_label,
+        year %in% period2_years ~ period2_label,
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    filter(!is.na(period))
+
+  trends <- annual_periods %>%
+    group_by(tmf_class_label, period, .drop = FALSE) %>%
+    summarise(median_period = median(median_precip, na.rm = TRUE), .groups = "drop") %>%
+    tidyr::pivot_wider(names_from = period, values_from = median_period) %>%
+    left_join(
+      annual_medians %>%
+        group_by(tmf_class_label, .drop = FALSE) %>%
+        summarise(trend_decade = trend_slope(year, median_precip) * 10, .groups = "drop"),
+      by = "tmf_class_label"
+    )
+
+  if (!(period1_label %in% names(trends))) trends[[period1_label]] <- NA_real_
+  if (!(period2_label %in% names(trends))) trends[[period2_label]] <- NA_real_
+
+  diff_period <- annual_periods %>%
+    left_join(
+      annual_periods %>%
+        filter(tmf_class_label == "Undisturbed") %>%
+        select(period, year, ref_median = median_precip),
+      by = c("period", "year")
+    ) %>%
+    mutate(diff_vs_undist = median_precip - ref_median) %>%
+    group_by(tmf_class_label, period, .drop = FALSE) %>%
+    summarise(mean_diff = mean(diff_vs_undist, na.rm = TRUE), .groups = "drop") %>%
+    tidyr::pivot_wider(names_from = period, values_from = mean_diff, names_glue = "diff_{period}")
+
+  if (!(glue::glue("diff_{period1_label}") %in% names(diff_period))) diff_period[[glue::glue("diff_{period1_label}")]] <- NA_real_
+  if (!(glue::glue("diff_{period2_label}") %in% names(diff_period))) diff_period[[glue::glue("diff_{period2_label}")]] <- NA_real_
+
+  trends <- trends %>%
+    left_join(diff_period, by = "tmf_class_label") %>%
+    mutate(
+      couverture_fr = tmf_fr[tmf_class_label] %||% tmf_class_label,
+      median_p1 = .[[period1_label]],
+      median_p2 = .[[period2_label]],
+      variation = median_p2 - median_p1,
+      diff_p1 = dplyr::case_when(
+        tmf_class_label == "Undisturbed" ~ 0,
+        TRUE ~ .[[glue::glue("diff_{period1_label}")]]
+      ),
+      diff_p2 = dplyr::case_when(
+        tmf_class_label == "Undisturbed" ~ 0,
+        TRUE ~ .[[glue::glue("diff_{period2_label}")]]
+      ),
+      diff_pair = dplyr::case_when(
+        tmf_class_label == "Undisturbed" ~ "— / —",
+        TRUE ~ format_period_pair(diff_p1, diff_p2, digits = 0)
+      )
+    ) %>%
+    transmute(
+      Couverture = couverture_fr,
+      !!glue::glue("Médiane {period1_label} (mm)") := format_fr_num(median_p1, digits = 0),
+      !!glue::glue("Médiane {period2_label} (mm)") := format_fr_num(median_p2, digits = 0),
+      `Variation (mm)` = format_fr_signed(variation, digits = 0),
+      `Tendance (mm par décennie)` = format_fr_signed(trend_decade, digits = 0),
+      !!glue::glue("Différence moyenne vs forêt non perturbée ({period1_label} / {period2_label}) (mm)") := diff_pair
+    )
+
+  list(overview = overview, trends = trends)
+}
+
+build_precip_monthly_tables <- function(df) {
+  if (is.null(df)) {
+    return(list(overview = tibble(), trends = tibble()))
+  }
+
+  df_clean <- df %>%
+    filter(!is.na(year), !is.na(month), !is.na(precipitation_mm), !is.na(tmf_class_label)) %>%
+    mutate(
+      year = as.integer(year),
+      month = as.integer(month),
+      tmf_class_label = factor(tmf_class_label, levels = TMF_CLASS_LEVELS)
+    ) %>%
+    drop_na()
+
+  if (nrow(df_clean) == 0) {
+    return(list(overview = tibble(), trends = tibble()))
+  }
+
+  period1_end <- min(YEAR_MIN + 10, YEAR_MAX)
+  period2_start <- min(period1_end + 1, YEAR_MAX)
+  period1_years <- seq(YEAR_MIN, period1_end)
+  period2_years <- seq(period2_start, YEAR_MAX)
+  period1_label <- glue::glue("{YEAR_MIN}-{period1_end}")
+  period2_label <- glue::glue("{period2_start}-{YEAR_MAX}")
+
+  monthly_summaries <- df_clean %>%
+    group_by(tmf_class_label, month, .drop = FALSE) %>%
+    summarise(
+      median_precip = median(precipitation_mm, na.rm = TRUE),
+      q25_precip = quantile(precipitation_mm, 0.25, na.rm = TRUE),
+      q75_precip = quantile(precipitation_mm, 0.75, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(iqr = q75_precip - q25_precip)
+
+  tmf_fr <- TMF_LABELS[["fr"]]
+  month_fr <- MONTH_LABELS[["fr"]]
+
+  monthly_overview <- monthly_summaries %>%
+    group_by(tmf_class_label, .drop = FALSE) %>%
+    summarise(
+      wettest_month = month[which.max(median_precip)],
+      wettest_median = max(median_precip, na.rm = TRUE),
+      driest_month = month[which.min(median_precip)],
+      driest_median = min(median_precip, na.rm = TRUE),
+      seasonal_amplitude = wettest_median - driest_median,
+      mean_iqr = mean(iqr, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    left_join(
+      monthly_summaries %>%
+        left_join(
+          monthly_summaries %>%
+            filter(tmf_class_label == "Undisturbed") %>%
+            select(month, ref_median = median_precip),
+          by = "month"
+        ) %>%
+        mutate(diff_vs_undist = median_precip - ref_median) %>%
+        group_by(tmf_class_label, .drop = FALSE) %>%
+        summarise(mean_diff_vs_undist = mean(diff_vs_undist, na.rm = TRUE), .groups = "drop"),
+      by = "tmf_class_label"
+    ) %>%
+    mutate(
+      tmf_class_label = as.character(tmf_class_label),
+      couverture_fr = tmf_fr[tmf_class_label] %||% tmf_class_label,
+      wettest_label = if_else(
+        is.na(wettest_month),
+        "",
+        glue::glue("{month_fr[wettest_month]} ({format_fr_num(wettest_median, digits = 0)})")
+      ),
+      driest_label = if_else(
+        is.na(driest_month),
+        "",
+        glue::glue("{month_fr[driest_month]} ({format_fr_num(driest_median, digits = 0)})")
+      ),
+      diff_label = dplyr::case_when(
+        tmf_class_label == "Undisturbed" ~ "—",
+        TRUE ~ format_fr_signed(mean_diff_vs_undist, digits = 0)
+      )
+    ) %>%
+    transmute(
+      Couverture = couverture_fr,
+      `Mois le plus humide / médiane (mm)` = wettest_label,
+      `Mois le plus sec / médiane (mm)` = driest_label,
+      `Amplitude saisonnière (mm)` = format_fr_num(seasonal_amplitude, digits = 0),
+      `IQR moyen (mm)` = format_fr_num(mean_iqr, digits = 0),
+      `Déficit moyen vs forêt non perturbée (mm)` = diff_label
+    )
+
+  monthly_year_summary <- df_clean %>%
+    mutate(
+      period = dplyr::case_when(
+        year %in% period1_years ~ period1_label,
+        year %in% period2_years ~ period2_label,
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    filter(!is.na(period)) %>%
+    group_by(tmf_class_label, period, year, month, .drop = FALSE) %>%
+    summarise(median_precip = median(precipitation_mm, na.rm = TRUE), .groups = "drop")
+
+  monthly_amplitude <- monthly_year_summary %>%
+    group_by(tmf_class_label, period, .drop = FALSE) %>%
+    summarise(amplitude = max(median_precip, na.rm = TRUE) - min(median_precip, na.rm = TRUE), .groups = "drop") %>%
+    tidyr::pivot_wider(names_from = period, values_from = amplitude)
+
+  if (!(period1_label %in% names(monthly_amplitude))) monthly_amplitude[[period1_label]] <- NA_real_
+  if (!(period2_label %in% names(monthly_amplitude))) monthly_amplitude[[period2_label]] <- NA_real_
+
+  monthly_diff <- monthly_year_summary %>%
+    left_join(
+      monthly_year_summary %>%
+        filter(tmf_class_label == "Undisturbed") %>%
+        select(period, year, month, ref_precip = median_precip),
+      by = c("period", "year", "month")
+    ) %>%
+    mutate(diff_vs_undist = median_precip - ref_precip) %>%
+    group_by(tmf_class_label, period, .drop = FALSE) %>%
+    summarise(mean_diff = mean(diff_vs_undist, na.rm = TRUE), .groups = "drop") %>%
+    tidyr::pivot_wider(names_from = period, values_from = mean_diff, names_glue = "diff_{period}")
+
+  if (!(glue::glue("diff_{period1_label}") %in% names(monthly_diff))) monthly_diff[[glue::glue("diff_{period1_label}")]] <- NA_real_
+  if (!(glue::glue("diff_{period2_label}") %in% names(monthly_diff))) monthly_diff[[glue::glue("diff_{period2_label}")]] <- NA_real_
+
+  monthly_trends <- monthly_amplitude %>%
+    left_join(monthly_diff, by = "tmf_class_label") %>%
+    mutate(
+      tmf_class_label = as.character(tmf_class_label),
+      couverture_fr = tmf_fr[tmf_class_label] %||% tmf_class_label,
+      amp_p1 = .[[period1_label]],
+      amp_p2 = .[[period2_label]],
+      variation_amp = amp_p2 - amp_p1,
+      diff_p1 = dplyr::case_when(
+        tmf_class_label == "Undisturbed" ~ 0,
+        TRUE ~ .[[glue::glue("diff_{period1_label}")]]
+      ),
+      diff_p2 = dplyr::case_when(
+        tmf_class_label == "Undisturbed" ~ 0,
+        TRUE ~ .[[glue::glue("diff_{period2_label}")]]
+      ),
+      diff_pair = dplyr::case_when(
+        tmf_class_label == "Undisturbed" ~ "— / —",
+        TRUE ~ format_period_pair(diff_p1, diff_p2, digits = 0)
+      ),
+      diff_variation = dplyr::case_when(
+        tmf_class_label == "Undisturbed" ~ "—",
+        TRUE ~ format_fr_signed(diff_p2 - diff_p1, digits = 0)
+      )
+    ) %>%
+    transmute(
+      Couverture = couverture_fr,
+      !!glue::glue("Amplitude saisonnière {period1_label} (mm)") := format_fr_num(amp_p1, digits = 0),
+      !!glue::glue("Amplitude saisonnière {period2_label} (mm)") := format_fr_num(amp_p2, digits = 0),
+      `Variation amplitude (mm)` = format_fr_signed(variation_amp, digits = 0),
+      !!glue::glue("Déficit moyen vs forêt non perturbée ({period1_label} / {period2_label}) (mm)") := diff_pair,
+      `Variation du déficit (mm)` = diff_variation
+    )
+
+  list(overview = monthly_overview, trends = monthly_trends)
+}
+
 ## 2.2 Plot builders ----
 # ------------------------------------------------------------------------- - - -
 plot_precip_annual_boxes <- function(df, lang, territory_title) {
@@ -481,6 +1038,37 @@ for (LANG in LANGS) {
 
     territory_title <- TERRITORY_LABELS[[TERRITORY]] %||% TERRITORY
 
+    if (identical(LANG, LANGS[[1]])) {
+      metrics_dir <- file.path("results", "metrics", TERRITORY, "derived")
+      dir.create(metrics_dir, recursive = TRUE, showWarnings = FALSE)
+
+      annual_tables <- build_precip_annual_tables(annual_df)
+      if (nrow(annual_tables$overview) > 0) {
+        annual_overview_stub <- glue(FILENAME_ANNUAL_OVERVIEW, TERRITORY = TERRITORY)
+        annual_overview_path <- file.path(metrics_dir, glue("{annual_overview_stub}.csv"))
+        readr::write_csv(annual_tables$overview, annual_overview_path, na = "")
+      }
+      if (nrow(annual_tables$trends) > 0) {
+        annual_trends_stub <- glue(FILENAME_ANNUAL_TRENDS, TERRITORY = TERRITORY)
+        annual_trends_path <- file.path(metrics_dir, glue("{annual_trends_stub}.csv"))
+        readr::write_csv(annual_tables$trends, annual_trends_path, na = "")
+      }
+
+      monthly_tables <- build_precip_monthly_tables(monthly_df)
+      if (nrow(monthly_tables$overview) > 0) {
+        monthly_overview_stub <- glue(FILENAME_MONTHLY_OVERVIEW, TERRITORY = TERRITORY)
+        monthly_overview_path <- file.path(metrics_dir, glue("{monthly_overview_stub}.csv"))
+        readr::write_csv(monthly_tables$overview, monthly_overview_path, na = "")
+      }
+      if (nrow(monthly_tables$trends) > 0) {
+        monthly_trends_stub <- glue(FILENAME_MONTHLY_TRENDS, TERRITORY = TERRITORY)
+        monthly_trends_path <- file.path(metrics_dir, glue("{monthly_trends_stub}.csv"))
+        readr::write_csv(monthly_tables$trends, monthly_trends_path, na = "")
+      }
+
+      message(glue("[metrics] Saved precipitation overview/trend tables to {basename(metrics_dir)} for {TERRITORY}"))
+    }
+
     ## 3.4 Annual plot ----
     # ----------------------------------------------------------------------- - - -
     if (!is.null(annual_df)) {
@@ -530,4 +1118,3 @@ for (LANG in LANGS) {
 }
 
 message("✓ Precipitation boxplots done.")
-

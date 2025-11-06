@@ -16,6 +16,7 @@ suppressPackageStartupMessages({
   library(scales)
   library(svglite)
   library(rlang)
+  library(purrr)
 })
 
 ## 1.1 Global parameters ----
@@ -274,6 +275,74 @@ for (LANG in LANGS) {
       next
     }
 
+    if (identical(LANG, LANGS[[1]])) {
+      metrics_dir <- file.path("results", "metrics", TERRITORY, "derived")
+      dir.create(metrics_dir, recursive = TRUE, showWarnings = FALSE)
+
+      yearly_metrics <- df_long %>%
+        arrange(source_used, year) %>%
+        group_by(source_used, .drop = FALSE) %>%
+        mutate(
+          area_ha = as.numeric(area_ha),
+          cumulative_area_ha = cumsum(replace_na(area_ha, 0)),
+          series_total_ha = sum(area_ha, na.rm = TRUE),
+          share_within_series = if_else(
+            series_total_ha > 0,
+            area_ha / series_total_ha,
+            NA_real_
+          ),
+          pct_change_prev_year = {
+            prev <- lag(area_ha)
+            if_else(
+              !is.na(prev) & prev != 0,
+              (area_ha - prev) / prev,
+              NA_real_
+            )
+          }
+        ) %>%
+        ungroup() %>%
+        select(-series_total_ha)
+
+      overall_metrics <- yearly_metrics %>%
+        group_by(source_used, .drop = FALSE) %>%
+        summarise(
+          years_covered = n_distinct(year),
+          year_min = min(year, na.rm = TRUE),
+          year_max = max(year, na.rm = TRUE),
+          area_total_ha = sum(area_ha, na.rm = TRUE),
+          area_mean_ha = mean(area_ha, na.rm = TRUE),
+          area_median_ha = stats::median(area_ha, na.rm = TRUE),
+          area_sd_ha = if (dplyr::n() > 1) stats::sd(area_ha, na.rm = TRUE) else NA_real_,
+          peak_idx = if_else(any(!is.na(area_ha)), which.max(area_ha), NA_integer_),
+          low_idx = if_else(any(!is.na(area_ha)), which.min(area_ha), NA_integer_),
+          data = list(tibble::tibble(year = year, area_ha = area_ha)),
+          .groups = "drop_last"
+        ) %>%
+        mutate(
+          peak_year = map2_dbl(data, peak_idx, ~ if (is.na(.y)) NA_real_ else .x$year[.y]),
+          peak_area_ha = map2_dbl(data, peak_idx, ~ if (is.na(.y)) NA_real_ else .x$area_ha[.y]),
+          low_year = map2_dbl(data, low_idx, ~ if (is.na(.y)) NA_real_ else .x$year[.y]),
+          low_area_ha = map2_dbl(data, low_idx, ~ if (is.na(.y)) NA_real_ else .x$area_ha[.y]),
+          latest_year = map_dbl(data, ~ dplyr::last(.x$year)),
+          latest_area_ha = map_dbl(data, ~ dplyr::last(.x$area_ha)),
+          prev_area = map_dbl(data, ~ if (nrow(.x) > 1) dplyr::lag(.x$area_ha) %>% dplyr::last() else NA_real_),
+          pct_change_latest_vs_prev = if_else(
+            !is.na(prev_area) & prev_area != 0,
+            (latest_area_ha - prev_area) / prev_area,
+            NA_real_
+          )
+        ) %>%
+        select(-peak_idx, -low_idx, -data, -prev_area) %>%
+        arrange(dplyr::desc(area_total_ha))
+
+      yearly_path <- file.path(metrics_dir, glue("{TERRITORY}_degradation_yearly_metrics.csv"))
+      overall_path <- file.path(metrics_dir, glue("{TERRITORY}_degradation_overall_metrics.csv"))
+
+      readr::write_csv(yearly_metrics, yearly_path, na = "")
+      readr::write_csv(overall_metrics, overall_path, na = "")
+
+      message(glue("[metrics] Saved degradation summaries to {basename(metrics_dir)} for {TERRITORY}"))
+    }
     present_sources <- levels(droplevels(df_long$source_used))  # should be "JRC-TMF"
     cols <- source_line_colors[present_sources]
     ltys <- source_line_types[present_sources]

@@ -18,6 +18,7 @@ suppressPackageStartupMessages({
   library(svglite)
   library(rlang)
   library(cowplot)   # NEW: to stack two independent plots (FO on top, NF below)
+  library(purrr)
 })
 
 ## 1.1 Global parameters ----
@@ -349,6 +350,106 @@ for (LANG in LANGS) {
       dplyr::arrange(year, .by_group = TRUE) %>%
       dplyr::mutate(area_ha = trim_leading_zeros(area_ha)) %>%
       dplyr::ungroup()
+
+    if (identical(LANG, LANGS[[1]])) {
+      metrics_dir <- file.path("results", "metrics", TERRITORY, "derived")
+      dir.create(metrics_dir, recursive = TRUE, showWarnings = FALSE)
+
+      metrics_burned <- df_long %>%
+        dplyr::mutate(area_ha = tidyr::replace_na(area_ha, 0))
+
+      total_by_year <- metrics_burned %>%
+        dplyr::group_by(year, .drop = FALSE) %>%
+        dplyr::summarise(
+          total_area_ha = sum(area_ha, na.rm = TRUE),
+          .groups = "drop"
+        )
+
+      burned_yearly_metrics <- metrics_burned %>%
+        dplyr::arrange(series, year) %>%
+        dplyr::group_by(series, .drop = FALSE) %>%
+        dplyr::mutate(
+          area_ha = as.numeric(area_ha),
+          cumulative_area_ha = cumsum(area_ha),
+          series_total_ha = sum(area_ha, na.rm = TRUE),
+          share_within_series = dplyr::if_else(
+            series_total_ha > 0,
+            area_ha / series_total_ha,
+            NA_real_
+          ),
+          pct_change_prev_year = {
+            prev <- dplyr::lag(area_ha)
+            dplyr::if_else(
+              !is.na(prev) & prev != 0,
+              (area_ha - prev) / prev,
+              NA_real_
+            )
+          }
+        ) %>%
+        dplyr::ungroup() %>%
+        dplyr::select(-series_total_ha) %>%
+        dplyr::left_join(total_by_year, by = "year") %>%
+        dplyr::mutate(
+          share_of_year_total = dplyr::if_else(
+            total_area_ha > 0,
+            area_ha / total_area_ha,
+            NA_real_
+          )
+        )
+
+      total_combined_area <- sum(total_by_year$total_area_ha, na.rm = TRUE)
+
+      burned_overall_metrics <- burned_yearly_metrics %>%
+        dplyr::group_by(series, .drop = FALSE) %>%
+        dplyr::summarise(
+          years_covered = dplyr::n(),
+          year_min = min(year, na.rm = TRUE),
+          year_max = max(year, na.rm = TRUE),
+          area_total_ha = sum(area_ha, na.rm = TRUE),
+          area_mean_ha = mean(area_ha, na.rm = TRUE),
+          area_median_ha = stats::median(area_ha, na.rm = TRUE),
+          area_sd_ha = if (dplyr::n() > 1) stats::sd(area_ha, na.rm = TRUE) else NA_real_,
+          peak_idx = if_else(any(!is.na(area_ha)), which.max(area_ha), NA_integer_),
+          low_idx  = if_else(any(!is.na(area_ha)), which.min(area_ha), NA_integer_),
+          data = list(tibble::tibble(year = year, area_ha = area_ha)),
+          .groups = "drop_last"
+        ) %>%
+        dplyr::mutate(
+          peak_year = purrr::map2_dbl(data, peak_idx, ~ if (is.na(.y)) NA_real_ else .x$year[.y]),
+          peak_area_ha = purrr::map2_dbl(data, peak_idx, ~ if (is.na(.y)) NA_real_ else .x$area_ha[.y]),
+          low_year = purrr::map2_dbl(data, low_idx, ~ if (is.na(.y)) NA_real_ else .x$year[.y]),
+          low_area_ha = purrr::map2_dbl(data, low_idx, ~ if (is.na(.y)) NA_real_ else .x$area_ha[.y]),
+          latest_year = purrr::map_dbl(data, ~ dplyr::last(.x$year)),
+          latest_area_ha = purrr::map_dbl(data, ~ dplyr::last(.x$area_ha)),
+          prev_area = purrr::map_dbl(
+            data,
+            ~ if (nrow(.x) > 1) dplyr::lag(.x$area_ha) %>% dplyr::last() else NA_real_
+          ),
+          pct_change_latest_vs_prev = dplyr::if_else(
+            !is.na(prev_area) & prev_area != 0,
+            (latest_area_ha - prev_area) / prev_area,
+            NA_real_
+          )
+        ) %>%
+        dplyr::select(-peak_idx, -low_idx, -data, -prev_area) %>%
+        dplyr::arrange(dplyr::desc(area_total_ha)) %>%
+        dplyr::ungroup() %>%
+        dplyr::mutate(
+          share_of_combined = if (is.finite(total_combined_area) && total_combined_area > 0) {
+            area_total_ha / total_combined_area
+          } else {
+            NA_real_
+          }
+        )
+
+      yearly_path <- file.path(metrics_dir, glue("{TERRITORY}_burned_yearly_metrics.csv"))
+      overall_path <- file.path(metrics_dir, glue("{TERRITORY}_burned_overall_metrics.csv"))
+
+      readr::write_csv(burned_yearly_metrics, yearly_path, na = "")
+      readr::write_csv(burned_overall_metrics, overall_path, na = "")
+
+      message(glue("[metrics] Saved burned area summaries to {basename(metrics_dir)} for {TERRITORY}"))
+    }
 
     present_series <- levels(droplevels(df_long$series))  # "fo","nf"
     cols <- source_line_colors[present_series]

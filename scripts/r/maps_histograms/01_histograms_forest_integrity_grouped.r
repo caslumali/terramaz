@@ -16,6 +16,7 @@ suppressPackageStartupMessages({
   library(scales)
   library(svglite)
   library(rlang)
+  library(purrr)
 })
 
 ## 1.1 Global parameters ----
@@ -34,13 +35,13 @@ TERRITORY_LABELS <- c(
   madre_de_dios = "Madre de Dios"
 )
 
-# Output file parameters (smaller than TS plots)
 UNITS         <- "mm"
 DPI           <- 300
 
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
-LANGS <- c("fr", "es", "pt", "en")   # "pt" | "es" | "fr" | "en"
+# LANGS <- c("fr", "es", "pt", "en")   # "pt" | "es" | "fr" | "en"
+LANGS <- c("fr")
 
 LABELS <- list(
   # Axes
@@ -52,7 +53,7 @@ LABELS <- list(
     en = "Percentage of area per class"
   ),
   # Titles (per macroclass)
-  title_macro = c(
+  title_macro = list(
     "10" = c(fr = "Forêt non perturbée", es = "Bosque no perturbado", pt = "Floresta não perturbada", en = "Undisturbed forest"),
     "20" = c(fr = "Forêt dégradée",      es = "Bosque degradado",     pt = "Floresta degradada",      en = "Degraded forest"),
     "30" = c(fr = "Forêt en régénération", es = "Bosque en regeneración", pt = "Floresta em regeneração", en = "Regrowth forest")
@@ -68,6 +69,25 @@ label <- function(key, ..., macro = NULL) {
   }
   glue::glue(template, .envir = rlang::env(...))
 }
+
+CLASS_LABELS_FR <- tibble::tibble(
+  macroclass = c(10, 10, 10, 20, 20, 20, 20, 20, 20, 30, 30, 30),
+  score = c(94, 97, 100, 100, 90, 80, 70, 60, 50, 100, 90, 80),
+  class_fr = c(
+    "Forêt non perturbée bord/îlot",
+    "Forêt non perturbée perforation",
+    "Forêt non perturbée cœur",
+    "Forêt dégradée courte durée (commencée avant 2015)",
+    "Forêt dégradée courte durée (commencée en 2015–2024)",
+    "Forêt dégradée longue durée (commencée avant 2015)",
+    "Forêt dégradée longue durée (commencée en 2015–2024)",
+    "Forêt dégradée 2/3 périodes courtes (dernière avant 2015)",
+    "Forêt dégradée 2/3 périodes courtes (dernière en 2015–2024)",
+    "Forêt en régénération ancienne (perturbée avant 2005)",
+    "Forêt en régénération jeune (perturbée en 2005–2014)",
+    "Forêt en régénération très jeune (perturbée en 2015–2022)"
+  )
+)
 
 ## 1.3 Palette for macroclasses & scores ----
 # ------------------------------------------------------------------------- - - -
@@ -90,8 +110,7 @@ score_colors <- c(
   # Macroclass 30 (Regrowth)
   "30_100" = "#810f7c",  # cor original do 100
   "30_90"  = "#8a73b5",  # cor original do 90
-  "30_80"  = "#afc8e0",  # cor original do 80
-
+  "30_80"  = "#afc8e0"  # cor original do 80
 )
 
 
@@ -232,6 +251,55 @@ for (LANG in LANGS) {
     message(glue("📊 Loading histogram: {basename(main_csv[1])}"))
     df <- load_histogram_csv(main_csv[1])
 
+    if (identical(LANG, LANGS[[1]])) {
+      total_area <- sum(df$area_ha, na.rm = TRUE)
+
+      metrics_tbl <- df %>%
+        mutate(
+          macroclass_num = as.integer(macroclass),
+          score_value = as.numeric(score)
+        ) %>%
+        left_join(
+          CLASS_LABELS_FR,
+          by = c("macroclass_num" = "macroclass", "score_value" = "score")
+        ) %>%
+        mutate(
+          class_fr = dplyr::if_else(
+            is.na(class_fr),
+            glue::glue("Classe {macroclass_num} ({score_value})"),
+            class_fr
+          ),
+          macro_fr = dplyr::recode(
+            as.character(macroclass_num),
+            "10" = LABELS$title_macro[["10"]][["fr"]],
+            "20" = LABELS$title_macro[["20"]][["fr"]],
+            "30" = LABELS$title_macro[["30"]][["fr"]],
+            .default = NA_character_
+          ),
+          part_macroclasse_pct = pct,
+          part_totale_pct = if (total_area > 0) 100 * area_ha / total_area else NA_real_
+        ) %>%
+        arrange(macroclass_num, dplyr::desc(score_value)) %>%
+        transmute(
+          `Macroclasse (fr)` = macro_fr,
+          `Classe (fr)` = class_fr,
+          `Score agrégé` = score_value,
+          `Part dans la macroclasse (%)` = part_macroclasse_pct,
+          `Part du total (%)` = part_totale_pct
+        )
+
+      metrics_dir <- file.path("results", "metrics", TERRITORY, "derived")
+      dir.create(metrics_dir, recursive = TRUE, showWarnings = FALSE)
+      metrics_path <- file.path(
+        metrics_dir,
+        glue("08_{TERRITORY}_forest_integrity_grouped_metrics.csv")
+      )
+      readr::write_csv(metrics_tbl, metrics_path, na = "")
+      message(
+        glue("[metrics] Saved forest integrity grouped summary for {TERRITORY}: {basename(metrics_path)}")
+      )
+    }
+
     # Order macroclasses 
     df <- df %>% mutate(macroclass = factor(macroclass, levels = c(10, 20, 30)))
     
@@ -337,3 +405,6 @@ for (LANG in LANGS) {
     cat("\n", paste(rep("-", 64), collapse=""), "\n", sep = "")
   }
 }
+
+
+

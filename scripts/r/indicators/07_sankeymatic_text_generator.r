@@ -45,13 +45,13 @@ TERRITORY_LABELS <- c(
 ## 1.2 Class labels (multilingual) ----
 CLASS_LABELS <- list(
   fr = c(
-    "Undisturbed"              = "Forêt intacte",
+    "Undisturbed"              = "Forêt non perturbée",
     "Degraded"                 = "Forêt dégradée",
     "Regrowth"                 = "Forêt en régénération",
-    "Undisturbed TF"           = "Forêt de terre ferme intacte",
+    "Undisturbed TF"           = "Forêt de terre ferme non perturbée",
     "Degraded TF"              = "Forêt de terre ferme dégradée",
     "Regrowth TF"              = "Forêt de terre ferme en régénération",
-    "Undisturbed FF"           = "Forêt inondée intacte",
+    "Undisturbed FF"           = "Forêt inondée non perturbée",
     "Degraded FF"              = "Forêt inondée dégradée",
     "Regrowth FF"              = "Forêt inondée en régénération",
     "Other natural vegetation" = "Autres formations naturelles",
@@ -62,13 +62,13 @@ CLASS_LABELS <- list(
     "Mosaic of uses"           = "Mosaïque d'usages"
   ),
   es = c(
-    "Undisturbed"              = "Bosque intacto",
+    "Undisturbed"              = "Bosque no perturbado",
     "Degraded"                 = "Bosque degradado",
     "Regrowth"                 = "Bosque en regeneración",
-    "Undisturbed TF"           = "Bosque de tierra firme intacto",
+    "Undisturbed TF"           = "Bosque de tierra firme no perturbado",
     "Degraded TF"              = "Bosque de tierra firme degradado",
     "Regrowth TF"              = "Bosque de tierra firme en regeneración",
-    "Undisturbed FF"           = "Bosque inundable intacto",
+    "Undisturbed FF"           = "Bosque inundable no perturbado",
     "Degraded FF"              = "Bosque inundable degradado",
     "Regrowth FF"              = "Bosque inundable en regeneración",
     "Other natural vegetation" = "Otra vegetación natural",
@@ -79,13 +79,13 @@ CLASS_LABELS <- list(
     "Mosaic of uses"           = "Mosaico de usos"
   ),
   pt = c(
-    "Undisturbed"              = "Floresta intacta",
+    "Undisturbed"              = "Floresta não perturbada",
     "Degraded"                 = "Floresta degradada",
     "Regrowth"                 = "Floresta em regeneração",
-    "Undisturbed TF"           = "Floresta de terra firme intacta",
+    "Undisturbed TF"           = "Floresta de terra firme Floresta não perturbada",
     "Degraded TF"              = "Floresta de terra firme degradada",
     "Regrowth TF"              = "Floresta de terra firme em regeneração",
-    "Undisturbed FF"           = "Floresta inundável intacta",
+    "Undisturbed FF"           = "Floresta inundável Floresta não perturbada",
     "Degraded FF"              = "Floresta inundável degradada",
     "Regrowth FF"              = "Floresta inundável em regeneração",
     "Other natural vegetation" = "Outra vegetação natural",

@@ -52,6 +52,7 @@ report_blueprint.md
 /scripts/quarto/docx
 **/*.quarto_ipynb
 !reference.docx
+!report_v1.docx
 
 # Ignore folders
 /deforisk
