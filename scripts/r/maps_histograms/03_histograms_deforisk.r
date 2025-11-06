@@ -35,10 +35,15 @@ PLOT_WIDTH  <- 250
 PLOT_HEIGHT <- 35
 OUTPUT_DIR <- file.path("results", "maps", "histograms", "deforisk_grouped")
 
-CLASS_NAMES <- factor(
-  c("Tres faible", "Faible", "Modere", "Eleve", "Tres eleve"),
-  levels = c("Tres faible", "Faible", "Modere", "Eleve", "Tres eleve")
+CLASS_TABLE <- tibble::tribble(
+  ~classe,        ~score_min, ~score_max,
+  "Très faible",   0.00,        0.19,
+  "Faible",        0.20,        0.39,
+  "Modéré",        0.40,        0.59,
+  "Élevé",         0.60,        0.79,
+  "Très élevé",    0.80,        1.00
 )
+CLASS_NAMES <- factor(CLASS_TABLE$classe, levels = CLASS_TABLE$classe)
 
 FILENAME_METRICS <- "10_{territory}_deforisk_risk_classes.csv"
 
@@ -166,12 +171,8 @@ for (LANG in LANGS) {
       c("#196e19", "#228b22", "#ffa500", "#e31a1c", "#000000")
     }
 
-    class_defs <- tibble::tibble(
-      classe = CLASS_NAMES,
-      score_min = c(0.00, 0.20, 0.40, 0.60, 0.80),
-      score_max = c(0.19, 0.39, 0.59, 0.79, 1.00),
-      couleur   = palette_vec
-    )
+    class_defs <- CLASS_TABLE %>%
+      mutate(couleur = palette_vec, classe = factor(classe, levels = CLASS_TABLE$classe))
     values_norm <- normalize_risk(values)
 
     class_id <- cut(
