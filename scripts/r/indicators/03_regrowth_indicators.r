@@ -73,6 +73,11 @@ TERRITORY_LABELS <- c(
 FILENAME_FLOW  <- "03a_{territory}_regrowth_flow_tmf_mb_{lang}"
 FILENAME_STOCK <- "03b_{territory}_regrowth_stock_{dataset}_{lang}"
 FILENAME_AGE   <- "03c_{territory}_regrowth_age_mb_{lang}"
+FILENAME_FLOW_OVERVIEW <- "03a_{territory}_regrowth_flow_overview"
+FILENAME_FLOW_TRENDS   <- "03a_{territory}_regrowth_flow_trends"
+FILENAME_STOCK_OVERVIEW <- "03b_{territory}_regrowth_stock_overview"
+FILENAME_STOCK_TRENDS   <- "03b_{territory}_regrowth_stock_trends"
+FILENAME_AGE_OVERVIEW   <- "03c_{territory}_regrowth_age_overview"
 
 # Fixed full-page figure size (A4 width) to match other figures
 FIG_WIDTH_MM   <- 431.8   # 17 in — full page width
@@ -83,6 +88,18 @@ DPI            <- 300
 # # Plot window (keep full axis to show NODATA years)
 PLOT_YEAR_MIN <- 1990L
 PLOT_YEAR_MAX <- 2024L
+
+WINDOWS_11YR <- list(
+  `1990-2000` = c(1990L, 2000L),
+  `2001-2011` = c(2001L, 2011L),
+  `2012-2022` = c(2012L, 2022L)
+)
+
+FLOW_WINDOWS <- list(
+  `1990-2000 (moyenne / part)` = c(1990L, 2000L),
+  `2001-2011 (moyenne / part)` = c(2001L, 2011L),
+  `2012-2022 (moyenne / part)` = c(2012L, 2022L)
+)
 
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
@@ -337,6 +354,95 @@ weighted_quantile <- function(x, w, probs) {
   })
 }
 
+format_number_fr <- function(x, digits = 0) {
+  if (length(x) == 0) return(character(0))
+  digits <- rep_len(digits, length.out = length(x))
+  vapply(
+    seq_along(x),
+    function(i) {
+      val <- x[i]
+      digs <- digits[i]
+      if (is.na(val) || !is.finite(val)) {
+        "--"
+      } else {
+        trimws(formatC(
+          round(val, digs),
+          format = "f",
+          big.mark = " ",
+          decimal.mark = ",",
+          digits = digs
+        ))
+      }
+    },
+    character(1),
+    USE.NAMES = FALSE
+  )
+}
+
+format_percent_fr <- function(x, digits = 2) {
+  if (length(x) == 0) return(character(0))
+  vals <- format_number_fr(x * 100, digits = digits)
+  ifelse(vals == "--", "--", paste0(vals, " %"))
+}
+
+share_fraction <- function(value, total) {
+  value <- as.numeric(value)
+  total <- as.numeric(total)
+  out <- rep(NA_real_, length(value))
+  valid <- !is.na(value) & !is.na(total)
+  pos <- valid & total > 0
+  out[pos] <- value[pos] / total[pos]
+  zero <- valid & total == 0 & value == 0
+  out[zero] <- 0
+  out
+}
+
+calc_cagr <- function(start_value, end_value, periods) {
+  if (is.na(start_value) || is.na(end_value) || is.na(periods)) return(NA_real_)
+  if (periods <= 0 || start_value <= 0 || end_value <= 0) return(NA_real_)
+  (end_value / start_value)^(1 / periods) - 1
+}
+
+format_year_value_share <- function(year, value, share) {
+  if (is.na(year) || is.na(value) || is.na(share)) return("--")
+  value_fmt <- format_number_fr(value)
+  share_fmt <- format_percent_fr(share)
+  if (value_fmt == "--" || share_fmt == "--") "--" else glue::glue("{year} ({value_fmt}) / {share_fmt}")
+}
+
+format_area_share <- function(area, share) {
+  if (is.na(area) || is.na(share)) return("--")
+  area_fmt <- format_number_fr(area)
+  share_fmt <- format_percent_fr(share)
+  if (area_fmt == "--" || share_fmt == "--") "--" else glue::glue("{area_fmt} ha / {share_fmt}")
+}
+
+compute_window_stats <- function(data_tbl, windows, total_sum, mean_digits = 0) {
+  purrr::map(windows, function(window_range) {
+    start_year <- window_range[1]
+    end_year <- window_range[2]
+    window_df <- data_tbl %>%
+      dplyr::filter(dplyr::between(year, start_year, end_year), !is.na(area_ha))
+    if (nrow(window_df) == 0) {
+      list(mean = "--", share = "--", cagr = "--")
+    } else {
+      window_df <- window_df %>% dplyr::arrange(year)
+      mean_val <- mean(window_df$area_ha, na.rm = TRUE)
+      sum_val  <- sum(window_df$area_ha, na.rm = TRUE)
+      share_val <- share_fraction(sum_val, total_sum)
+      start_row <- window_df %>% dplyr::slice_head(n = 1)
+      end_row   <- window_df %>% dplyr::slice_tail(n = 1)
+      years_span <- end_row$year - start_row$year
+      cagr_val <- calc_cagr(start_row$area_ha, end_row$area_ha, years_span)
+      list(
+        mean = format_number_fr(mean_val, digits = mean_digits),
+        share = format_percent_fr(share_val),
+        cagr = format_percent_fr(cagr_val)
+      )
+    }
+  })
+}
+
 ##%###########################################################################%##
 #                                                                               #
 #                         3) Flow processing loop                            ----
@@ -427,7 +533,7 @@ for (LANG in LANGS) {
     # - MapBiomas events: 1990–2021 (t+2 rule → no events in 2022+)
     # - TMF-JRC flow:     1990–2022 (mask 2023–2024 as NODATA)
     YEAR_MIN <- c(`TMF-JRC` = 1990L, MapBiomas = 1990L)
-    YEAR_MAX <- c(`TMF-JRC` = 2022L, MapBiomas = 2021L)
+    YEAR_MAX <- c(`TMF-JRC` = 2022L, MapBiomas = 2022L)
 
     df_long <- long_main %>%
       dplyr::mutate(
@@ -461,77 +567,73 @@ for (LANG in LANGS) {
       metrics_dir <- file.path("results", "metrics", TERRITORY, "derived")
       dir.create(metrics_dir, recursive = TRUE, showWarnings = FALSE)
 
-      metrics_flow <- df_long %>%
-        dplyr::filter(!is.na(area_ha)) %>%
-        dplyr::arrange(source_used, year)
+      flow_metrics <- df_long %>%
+        dplyr::filter(year >= 1990L, year <= 2022L, !is.na(area_ha))
 
-      if (nrow(metrics_flow) == 0) {
-        message(glue("[metrics] No valid regrowth flow data to summarise for {TERRITORY}"))
-        next
-      }
-
-      flow_yearly_metrics <- metrics_flow %>%
-        dplyr::group_by(source_used, .drop = FALSE) %>%
-        dplyr::mutate(
-          area_ha = tidyr::replace_na(area_ha, 0),
-          cumulative_area_ha = cumsum(area_ha),
-          series_total_ha = sum(area_ha, na.rm = TRUE),
-          share_within_series = dplyr::if_else(
-            series_total_ha > 0,
-            area_ha / series_total_ha,
-            NA_real_
-          ),
-          pct_change_prev_year = {
-            prev <- dplyr::lag(area_ha)
-            dplyr::if_else(
-              !is.na(prev) & prev != 0,
-              (area_ha - prev) / prev,
-              NA_real_
-            )
-          }
-        ) %>%
-        dplyr::ungroup() %>%
-        dplyr::select(-series_total_ha)
-
-      flow_overall_metrics <- flow_yearly_metrics %>%
+      source_tables <- flow_metrics %>%
         dplyr::group_by(source_used, .drop = FALSE) %>%
         dplyr::summarise(
-          years_covered = dplyr::n(),
-          year_min = min(year, na.rm = TRUE),
-          year_max = max(year, na.rm = TRUE),
-          area_total_ha = sum(area_ha, na.rm = TRUE),
-          area_mean_ha = mean(area_ha, na.rm = TRUE),
-          area_median_ha = stats::median(area_ha, na.rm = TRUE),
-          area_sd_ha = if (dplyr::n() > 1) stats::sd(area_ha, na.rm = TRUE) else NA_real_,
-          peak_idx = if_else(any(!is.na(area_ha)), which.max(area_ha), NA_integer_),
-          low_idx  = if_else(any(!is.na(area_ha)), which.min(area_ha), NA_integer_),
           data = list(tibble::tibble(year = year, area_ha = area_ha)),
-          .groups = "drop_last"
-        ) %>%
-        dplyr::mutate(
-          peak_year = purrr::map2_dbl(data, peak_idx, ~ if (is.na(.y)) NA_real_ else .x$year[.y]),
-          peak_area_ha = purrr::map2_dbl(data, peak_idx, ~ if (is.na(.y)) NA_real_ else .x$area_ha[.y]),
-          low_year = purrr::map2_dbl(data, low_idx, ~ if (is.na(.y)) NA_real_ else .x$year[.y]),
-          low_area_ha = purrr::map2_dbl(data, low_idx, ~ if (is.na(.y)) NA_real_ else .x$area_ha[.y]),
-          latest_year = purrr::map_dbl(data, ~ dplyr::last(.x$year)),
-          latest_area_ha = purrr::map_dbl(data, ~ dplyr::last(.x$area_ha)),
-          prev_area = purrr::map_dbl(data, ~ if (nrow(.x) > 1) dplyr::lag(.x$area_ha) %>% dplyr::last() else NA_real_),
-          pct_change_latest_vs_prev = dplyr::if_else(
-            !is.na(prev_area) & prev_area != 0,
-            (latest_area_ha - prev_area) / prev_area,
-            NA_real_
+          total_ha = sum(area_ha, na.rm = TRUE),
+          .groups = "drop"
+        )
+
+      if (nrow(source_tables) == 0) {
+        message(glue("[metrics] No regrowth flow data to summarise for {TERRITORY}"))
+      } else {
+        flow_overview <- purrr::map_dfr(seq_len(nrow(source_tables)), function(idx) {
+          src_label <- as.character(source_tables$source_used[idx])
+          data_tbl <- source_tables$data[[idx]] %>% dplyr::filter(!is.na(area_ha))
+          if (nrow(data_tbl) == 0) {
+            return(tibble::tibble(
+              Source = src_label,
+              `Surface totale régénérée (ha)` = "--",
+              `Régénération moyenne (ha/an)` = "--",
+              `Année la plus forte / Part du total` = "--",
+              `Année la plus faible / Part du total` = "--"
+            ))
+          }
+          total_ha <- sum(data_tbl$area_ha, na.rm = TRUE)
+          mean_ha <- mean(data_tbl$area_ha, na.rm = TRUE)
+          peak_row <- data_tbl %>% dplyr::arrange(dplyr::desc(area_ha), year) %>% dplyr::slice_head(n = 1)
+          low_row  <- data_tbl %>% dplyr::arrange(area_ha, year) %>% dplyr::slice_head(n = 1)
+          peak_val <- peak_row$area_ha
+          low_val  <- low_row$area_ha
+          tibble::tibble(
+            Source = src_label,
+            `Surface totale régénérée (ha)` = format_number_fr(total_ha),
+            `Régénération moyenne (ha/an)` = format_number_fr(mean_ha),
+            `Année la plus forte / Part du total` = format_year_value_share(peak_row$year, peak_val, share_fraction(peak_val, total_ha)),
+            `Année la plus faible / Part du total` = format_year_value_share(low_row$year, low_val, share_fraction(low_val, total_ha))
           )
-        ) %>%
-        dplyr::select(-peak_idx, -low_idx, -data, -prev_area) %>%
-        dplyr::arrange(dplyr::desc(area_total_ha))
+        })
 
-      yearly_path <- file.path(metrics_dir, glue("{TERRITORY}_regrowth_flow_yearly_metrics.csv"))
-      overall_path <- file.path(metrics_dir, glue("{TERRITORY}_regrowth_flow_overall_metrics.csv"))
+        flow_trends <- purrr::map_dfr(seq_len(nrow(source_tables)), function(idx) {
+          src_label <- as.character(source_tables$source_used[idx])
+          data_tbl <- source_tables$data[[idx]]
+          total_sum <- source_tables$total_ha[idx]
+          window_stats <- compute_window_stats(data_tbl, FLOW_WINDOWS, total_sum, mean_digits = 0)
+          cells <- purrr::map(window_stats, function(item) {
+            if (is.null(item) || item$mean == "--" || item$share == "--") {
+              "--"
+            } else {
+              glue::glue("{item$mean} / {item$share}")
+            }
+          })
+          tibble::tibble(
+            Source = src_label,
+            !!!rlang::set_names(cells, names(FLOW_WINDOWS))
+          )
+        })
 
-      readr::write_csv(flow_yearly_metrics, yearly_path, na = "")
-      readr::write_csv(flow_overall_metrics, overall_path, na = "")
-
-      message(glue("[metrics] Saved regrowth flow summaries to {basename(metrics_dir)} for {TERRITORY}"))
+        overview_stub <- glue(FILENAME_FLOW_OVERVIEW, territory = TERRITORY)
+        overview_path <- file.path(metrics_dir, glue("{overview_stub}.csv"))
+        trends_stub <- glue(FILENAME_FLOW_TRENDS, territory = TERRITORY)
+        trends_path <- file.path(metrics_dir, glue("{trends_stub}.csv"))
+        readr::write_csv(flow_overview, overview_path, na = "")
+        readr::write_csv(flow_trends, trends_path, na = "")
+        message(glue("[metrics] Saved regrowth flow overview + trends tables to {basename(metrics_dir)} for {TERRITORY}"))
+      }
     }
 
     present_sources <- levels(droplevels(df_long$source_used))
@@ -714,10 +816,10 @@ for (LANG in LANGS) {
     is_gee <- tolower(TERRITORY) == "madre_de_dios"
 
     YEAR_MIN <- c(`TMF-JRC` = 1990L, MapBiomas = 1990L)
-    YEAR_MAX <- c(`TMF-JRC` = 2022L, MapBiomas = ifelse(is_site, 2024L, 2023L))
+    YEAR_MAX <- c(`TMF-JRC` = 2022L, MapBiomas = 2022L)
 
     plot_min <- 1990L
-    plot_max <- ifelse(is_site, 2024L, 2023L)
+    plot_max <- 2022L
 
     df_long <- long_main %>%
       dplyr::mutate(
@@ -752,115 +854,76 @@ for (LANG in LANGS) {
       metrics_dir <- file.path("results", "metrics", TERRITORY, "derived")
       dir.create(metrics_dir, recursive = TRUE, showWarnings = FALSE)
 
-      stock_metrics <- df_long %>%
-        dplyr::mutate(
-          area_original_ha = area_ha,
-          area_ha = tidyr::replace_na(area_ha, 0)
-        ) %>%
-        dplyr::arrange(source_used, year) %>%
-        dplyr::filter(!(source_used == "MapBiomas" & year >= 2023))
+      stock_base <- df_long %>%
+        dplyr::filter(source_used == "MapBiomas", year >= 1990L, year <= 2022L) %>%
+        dplyr::arrange(year)
 
-      stock_yearly_metrics <- stock_metrics %>%
-        dplyr::group_by(source_used, .drop = FALSE) %>%
-        dplyr::mutate(
-          cumulative_area_ha = cumsum(area_ha),
-          series_total_ha = sum(area_ha, na.rm = TRUE),
-          share_within_series = dplyr::if_else(
-            series_total_ha > 0,
-            area_ha / series_total_ha,
-            NA_real_
+      if (nrow(stock_base) == 0) {
+        stock_base <- df_long %>%
+          dplyr::filter(year >= 1990L, year <= 2022L) %>%
+          dplyr::arrange(year)
+      }
+
+      stock_base <- stock_base %>% dplyr::filter(!is.na(area_ha))
+
+      if (nrow(stock_base) == 0) {
+        message(glue("[metrics] No regrowth stock data to summarise for {TERRITORY}"))
+      } else {
+        initial_row <- stock_base %>% dplyr::slice_head(n = 1)
+        current_row <- stock_base %>% dplyr::slice_tail(n = 1)
+        initial_year <- initial_row$year
+        current_year <- current_row$year
+        initial_area <- initial_row$area_ha
+        current_area <- current_row$area_ha
+        variation_abs <- current_area - initial_area
+        variation_rel <- safe_divide(variation_abs, initial_area)
+        cagr_global <- calc_cagr(initial_area, current_area, current_year - initial_year)
+
+        overview_table <- tibble::tibble(
+          Indicateur = c(
+            "Surface initiale de foret secondaire",
+            "Surface actuelle de foret secondaire",
+            "Variation absolue (ha)",
+            "Variation relative (%)",
+            "Taux de croissance annuel compose (1990-2022)"
           ),
-          pct_change_prev_year = {
-            prev <- dplyr::lag(area_ha)
-            dplyr::if_else(
-              !is.na(prev) & prev != 0,
-              (area_ha - prev) / prev,
-              NA_real_
-            )
-          }
-        ) %>%
-        dplyr::ungroup()
+          Valeur = c(
+            format_number_fr(initial_area),
+            format_number_fr(current_area),
+            format_number_fr(variation_abs),
+            format_percent_fr(variation_rel),
+            format_percent_fr(cagr_global)
+          )
+        )
 
-      stock_overall_metrics <- stock_yearly_metrics %>%
-        dplyr::group_by(source_used, .drop = FALSE) %>%
-        dplyr::summarise(
-          years_covered = dplyr::n(),
-          year_min = min(year, na.rm = TRUE),
-          year_max = max(year, na.rm = TRUE),
-          area_total_ha = sum(area_ha, na.rm = TRUE),
-          area_mean_ha = mean(area_ha, na.rm = TRUE),
-          area_median_ha = stats::median(area_ha, na.rm = TRUE),
-          area_sd_ha = if (dplyr::n() > 1) stats::sd(area_ha, na.rm = TRUE) else NA_real_,
-          data = list(tibble::tibble(year = year, area_ha = area_ha, area_original_ha = area_original_ha)),
-          .groups = "drop_last"
-        ) %>%
-        dplyr::mutate(
-          start_year = purrr::map_int(data, ~ {
-            vals <- .x %>% dplyr::filter(!is.na(area_original_ha))
-            if (nrow(vals) == 0) NA_integer_ else vals$year[1]
-          }),
-          start_area_ha = purrr::map2_dbl(data, start_year, ~ {
-            if (is.na(.y)) NA_real_ else {
-              vals <- .x %>% dplyr::filter(year == .y)
-              if (nrow(vals) == 0) NA_real_ else vals$area_ha[1]
-            }
-          }),
-          end_year = purrr::map_int(data, ~ {
-            vals <- .x %>% dplyr::filter(!is.na(area_original_ha))
-            if (nrow(vals) == 0) NA_integer_ else vals$year[nrow(vals)]
-          }),
-          end_area_ha = purrr::map2_dbl(data, end_year, ~ {
-            if (is.na(.y)) NA_real_ else {
-              vals <- .x %>% dplyr::filter(year == .y)
-              if (nrow(vals) == 0) NA_real_ else vals$area_ha[1]
-            }
-          }),
-          prev_area = purrr::map2_dbl(data, end_year, ~ {
-            if (is.na(.y)) NA_real_ else {
-              prev_year <- .y - 1
-              vals <- .x %>% dplyr::filter(year == prev_year)
-              if (nrow(vals) == 0) NA_real_ else vals$area_ha[1]
-            }
-          }),
-          years_span = end_year - start_year,
-          delta_abs_ha = end_area_ha - start_area_ha,
-          delta_rel = safe_divide(delta_abs_ha, start_area_ha),
-          cagr = dplyr::if_else(
-            !is.na(start_area_ha) & start_area_ha > 0 &
-              !is.na(end_area_ha) & end_area_ha > 0 &
-              !is.na(years_span) & years_span > 0,
-            (end_area_ha / start_area_ha)^(1 / years_span) - 1,
-            NA_real_
+        total_sum <- sum(stock_base$area_ha, na.rm = TRUE)
+        window_stats <- compute_window_stats(stock_base, WINDOWS_11YR, total_sum, mean_digits = 0)
+
+        stock_trends <- dplyr::bind_rows(
+          tibble::tibble(
+            Indicateur = "Moyenne (ha)",
+            !!!rlang::set_names(purrr::map(window_stats, "mean"), names(WINDOWS_11YR))
           ),
-          avg_first5_ha = purrr::map_dbl(data, ~ {
-            vals <- .x %>% dplyr::filter(!is.na(area_original_ha)) %>% dplyr::arrange(year)
-            if (nrow(vals) == 0) NA_real_ else mean(head(vals$area_ha, min(5, nrow(vals))), na.rm = TRUE)
-          }),
-          avg_last5_ha = purrr::map_dbl(data, ~ {
-            vals <- .x %>% dplyr::filter(!is.na(area_original_ha)) %>% dplyr::arrange(year)
-            if (nrow(vals) == 0) NA_real_ else mean(tail(vals$area_ha, min(5, nrow(vals))), na.rm = TRUE)
-          }),
-          pct_change_latest_vs_prev = dplyr::if_else(
-            !is.na(prev_area) & prev_area != 0,
-            (end_area_ha - prev_area) / prev_area,
-            NA_real_
+          tibble::tibble(
+            Indicateur = "Part du total (%)",
+            !!!rlang::set_names(purrr::map(window_stats, "share"), names(WINDOWS_11YR))
           ),
-          latest_year = end_year,
-          latest_area_ha = end_area_ha
-        ) %>%
-        dplyr::select(-data, -prev_area) %>%
-        dplyr::arrange(dplyr::desc(area_total_ha))
+          tibble::tibble(
+            Indicateur = "Taux de croissance annuel compose (%)",
+            !!!rlang::set_names(purrr::map(window_stats, "cagr"), names(WINDOWS_11YR))
+          )
+        )
 
-      stock_yearly_metrics <- stock_yearly_metrics %>%
-        dplyr::select(source_used, year, area_ha, area_original_ha, cumulative_area_ha, share_within_series, pct_change_prev_year)
+        overview_stub <- glue(FILENAME_STOCK_OVERVIEW, territory = TERRITORY)
+        trends_stub <- glue(FILENAME_STOCK_TRENDS, territory = TERRITORY)
+        overview_path <- file.path(metrics_dir, glue("{overview_stub}.csv"))
+        trends_path <- file.path(metrics_dir, glue("{trends_stub}.csv"))
 
-      yearly_path <- file.path(metrics_dir, glue("{TERRITORY}_regrowth_stock_yearly_metrics.csv"))
-      overall_path <- file.path(metrics_dir, glue("{TERRITORY}_regrowth_stock_overall_metrics.csv"))
+        readr::write_csv(overview_table, overview_path, na = "")
+        readr::write_csv(stock_trends, trends_path, na = "")
 
-      readr::write_csv(stock_yearly_metrics, yearly_path, na = "")
-      readr::write_csv(stock_overall_metrics, overall_path, na = "")
-
-      message(glue("[metrics] Saved regrowth stock summaries to {basename(metrics_dir)} for {TERRITORY}"))
+        message(glue("[metrics] Saved regrowth stock overview + trends tables to {basename(metrics_dir)} for {TERRITORY}"))
+      }
     }
 
     present_sources <- levels(droplevels(df_long$source_used))
@@ -1068,61 +1131,52 @@ for (LANG in LANGS) {
 
       total_area <- sum(df$area_ha, na.rm = TRUE)
 
-      distribution_tbl <- df %>%
-        dplyr::arrange(age_years) %>%
-        dplyr::mutate(
-          share_within_total = safe_divide(area_ha, total_area),
-          cumulative_share = if (total_area > 0) cumsum(area_ha) / total_area else NA_real_
-        )
-
       weighted_mean_age <- safe_divide(sum(df$age_years * df$area_ha, na.rm = TRUE), total_area)
       quantiles <- weighted_quantile(df$age_years, df$area_ha, c(0.25, 0.5, 0.75))
       share_le_5 <- safe_divide(sum(df$area_ha[df$age_years <= 5], na.rm = TRUE), total_area)
       share_le_10 <- safe_divide(sum(df$area_ha[df$age_years <= 10], na.rm = TRUE), total_area)
-      share_ge_20 <- safe_divide(sum(df$area_ha[df$age_years >= 20], na.rm = TRUE), total_area)
+      share_11_20 <- safe_divide(sum(df$area_ha[df$age_years >= 11 & df$age_years <= 20], na.rm = TRUE), total_area)
+      share_21_30 <- safe_divide(sum(df$area_ha[df$age_years >= 21 & df$age_years < 30], na.rm = TRUE), total_area)
+      share_ge_30 <- safe_divide(sum(df$area_ha[df$age_years >= 30], na.rm = TRUE), total_area)
+      area_le_10 <- sum(df$area_ha[df$age_years <= 10], na.rm = TRUE)
+      area_11_20 <- sum(df$area_ha[df$age_years >= 11 & df$age_years <= 20], na.rm = TRUE)
+      area_21_30 <- sum(df$area_ha[df$age_years >= 21 & df$age_years < 30], na.rm = TRUE)
+      area_ge_30 <- sum(df$area_ha[df$age_years >= 30], na.rm = TRUE)
       dominant_idx <- if (nrow(df) > 0) which.max(df$area_ha) else NA_integer_
       dominant_age <- if (is.na(dominant_idx)) NA_real_ else df$age_years[dominant_idx]
       dominant_area <- if (is.na(dominant_idx)) NA_real_ else df$area_ha[dominant_idx]
       dominant_share <- safe_divide(dominant_area, total_area)
 
-      age_summary <- tibble::tibble(
-        metric = c(
-          "total_area_ha",
-          "weighted_mean_age_years",
-          "median_age_years",
-          "p25_age_years",
-          "p75_age_years",
-          "share_age_le_5",
-          "share_age_le_10",
-          "share_age_ge_20",
-          "dominant_age_years",
-          "dominant_area_ha",
-          "dominant_share",
-          "first_year",
-          "last_year"
+      median_age_val <- if (is.na(quantiles[2])) "--" else glue::glue("{format_number_fr(quantiles[2], digits = 1)} ans")
+      dominant_text <- if (is.na(dominant_age)) {
+        "--"
+      } else {
+        glue::glue("{dominant_age} ans ({format_number_fr(dominant_area)} ha, {format_percent_fr(dominant_share)})")
+      }
+
+      age_overview <- tibble::tibble(
+        Indicateur = c(
+          "Âge médian (P50)",
+          "Classe dominante",
+          "Part ≤ 10 ans",
+          "Part > 11 ans < 20 ans",
+          "Part > 21 ans < 30 ans",
+          "Part ≥ 30 ans"
         ),
-        value = c(
-          total_area,
-          weighted_mean_age,
-          quantiles[2],
-          quantiles[1],
-          quantiles[3],
-          share_le_5,
-          share_le_10,
-          share_ge_20,
-          dominant_age,
-          dominant_area,
-          dominant_share,
-          first_year,
-          last_year
+        Valeur = c(
+          median_age_val,
+          dominant_text,
+          format_area_share(area_le_10, share_le_10),
+          format_area_share(area_11_20, share_11_20),
+          format_area_share(area_21_30, share_21_30),
+          format_area_share(area_ge_30, share_ge_30)
         )
       )
 
-      distribution_path <- file.path(metrics_dir, glue("{TERRITORY}_regrowth_age_distribution_metrics.csv"))
-      summary_path <- file.path(metrics_dir, glue("{TERRITORY}_regrowth_age_summary_metrics.csv"))
+      age_overview_stub <- glue(FILENAME_AGE_OVERVIEW, territory = TERRITORY)
+      overview_path <- file.path(metrics_dir, glue("{age_overview_stub}.csv"))
 
-      readr::write_csv(distribution_tbl, distribution_path, na = "")
-      readr::write_csv(age_summary, summary_path, na = "")
+      readr::write_csv(age_overview, overview_path, na = "")
 
       message(glue("[metrics] Saved regrowth age summaries to {basename(metrics_dir)} for {TERRITORY}"))
     }

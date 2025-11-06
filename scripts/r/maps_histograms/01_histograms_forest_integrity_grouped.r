@@ -70,6 +70,39 @@ label <- function(key, ..., macro = NULL) {
   glue::glue(template, .envir = rlang::env(...))
 }
 
+FILENAME_METRICS <- "08_{territory}_forest_integrity_grouped_metrics"
+
+format_number_fr <- function(x, digits = 0) {
+  if (length(x) == 0) return(character(0))
+  digits <- rep_len(digits, length.out = length(x))
+  vapply(
+    seq_along(x),
+    function(i) {
+      val <- x[i]
+      dig <- digits[i]
+      if (is.na(val) || !is.finite(val)) {
+        "--"
+      } else {
+        trimws(formatC(
+          round(val, dig),
+          format = "f",
+          big.mark = " ",
+          decimal.mark = ",",
+          digits = dig
+        ))
+      }
+    },
+    character(1),
+    USE.NAMES = FALSE
+  )
+}
+
+format_percent_fr <- function(x, digits = 2) {
+  if (length(x) == 0) return(character(0))
+  vals <- format_number_fr(x * 100, digits = digits)
+  ifelse(vals == "--", "--", paste0(vals, " %"))
+}
+
 CLASS_LABELS_FR <- tibble::tibble(
   macroclass = c(10, 10, 10, 20, 20, 20, 20, 20, 20, 30, 30, 30),
   score = c(94, 97, 100, 100, 90, 80, 70, 60, 50, 100, 90, 80),

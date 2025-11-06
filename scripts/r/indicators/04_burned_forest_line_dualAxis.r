@@ -39,8 +39,10 @@ TERRITORY_LABELS <- c(
 )
 
 # Fixed full-page export size (A4-width figures in your layout)
-FILENAME_FIRE <- "04_{territory}_burned_fo_nf_dualaxis_{lang}"
-FIG_WIDTH_MM  <- 431.8   # 17 in — full page width
+FILENAME_FIRE             <- "04_{territory}_burned_fo_nf_dualaxis_{lang}"
+FILENAME_BURNED_OVERVIEW  <- "04_{territory}_burned_overview"
+FILENAME_BURNED_TRENDS    <- "04_{territory}_burned_trends"
+FIG_WIDTH_MM  <- 431.8   # 17 in – full page width
 FIG_HEIGHT_MM <- 190
 UNITS         <- "mm"
 DPI           <- 300
@@ -48,6 +50,12 @@ DPI           <- 300
 # Time window for burned series
 BURN_YEAR_MIN <- 2001
 BURN_YEAR_MAX <- 2024
+
+BURN_WINDOWS <- list(
+  `2001-2008 (moyenne / part)` = c(2001L, 2008L),
+  `2009-2016 (moyenne / part)` = c(2009L, 2016L),
+  `2017-2024 (moyenne / part)` = c(2017L, 2024L)
+)
 
 # Territories considered "Brazil" (use MapBiomas+GLAD fire in caption)
 BRAZIL_TERRITORIES <- c("cotriguacu", "paragominas")
@@ -93,6 +101,104 @@ LABELS <- list(
 label <- function(key, ...) {
   template <- LABELS[[key]][[LANG]]
   glue::glue(template, .envir = rlang::env(...))
+}
+
+COVERAGE_LABELS <- c(
+  nf = "Hors forêt",
+  fo = "En forêt"
+)
+
+coverage_label <- function(series_vec) {
+  labs <- COVERAGE_LABELS
+  vals <- labs[as.character(series_vec)]
+  ifelse(is.na(vals), as.character(series_vec), vals)
+}
+
+format_number_fr <- function(x, digits = 0) {
+  if (length(x) == 0) return(character(0))
+  digits <- rep_len(digits, length.out = length(x))
+  vapply(
+    seq_along(x),
+    function(i) {
+      val <- x[i]
+      dig <- digits[i]
+      if (is.na(val) || !is.finite(val)) {
+        "--"
+      } else {
+        trimws(formatC(
+          round(val, dig),
+          format = "f",
+          big.mark = " ",
+          decimal.mark = ",",
+          digits = dig
+        ))
+      }
+    },
+    character(1),
+    USE.NAMES = FALSE
+  )
+}
+
+format_percent_fr <- function(x, digits = 2) {
+  if (length(x) == 0) return(character(0))
+  vals <- format_number_fr(x * 100, digits = digits)
+  ifelse(vals == "--", "--", paste0(vals, " %"))
+}
+
+share_fraction <- function(value, total) {
+  value <- as.numeric(value)
+  total <- as.numeric(total)
+  out <- rep(NA_real_, length(value))
+  valid <- !is.na(value) & !is.na(total)
+  pos <- valid & total > 0
+  out[pos] <- value[pos] / total[pos]
+  zero <- valid & total == 0 & value == 0
+  out[zero] <- 0
+  out
+}
+
+format_year_value_share <- function(year, value, share) {
+  n <- max(length(year), length(value), length(share))
+  if (n == 0) return(character(0))
+  year <- rep_len(year, n)
+  value <- rep_len(value, n)
+  share <- rep_len(share, n)
+  vapply(
+    seq_len(n),
+    function(i) {
+      if (is.na(year[i]) || is.na(value[i]) || is.na(share[i])) {
+        "--"
+      } else {
+        value_fmt <- format_number_fr(value[i])
+        share_fmt <- format_percent_fr(share[i])
+        if (value_fmt == "--" || share_fmt == "--") "--"
+        else sprintf("%s (%s) / %s", year[i], value_fmt, share_fmt)
+      }
+    },
+    character(1),
+    USE.NAMES = FALSE
+  )
+}
+
+format_mean_share_cell <- function(mean_val, share_val) {
+  if (is.na(mean_val) || is.na(share_val)) return("--")
+  mean_fmt <- format_number_fr(mean_val)
+  share_fmt <- format_percent_fr(share_val)
+  if (mean_fmt == "--" || share_fmt == "--") "--" else glue::glue("{mean_fmt} / {share_fmt}")
+}
+
+compute_window_cells <- function(df, windows, total_sum) {
+  purrr::map(windows, function(window_range) {
+    window_df <- df %>%
+      dplyr::filter(dplyr::between(year, window_range[1], window_range[2]), !is.na(area_ha))
+    if (nrow(window_df) == 0) {
+      "--"
+    } else {
+      mean_val <- mean(window_df$area_ha, na.rm = TRUE)
+      sum_val <- sum(window_df$area_ha, na.rm = TRUE)
+      format_mean_share_cell(mean_val, share_fraction(sum_val, total_sum))
+    }
+  })
 }
 
 ## 1.3 Palette (single source) ----
@@ -355,100 +461,69 @@ for (LANG in LANGS) {
       metrics_dir <- file.path("results", "metrics", TERRITORY, "derived")
       dir.create(metrics_dir, recursive = TRUE, showWarnings = FALSE)
 
-      metrics_burned <- df_long %>%
-        dplyr::mutate(area_ha = tidyr::replace_na(area_ha, 0))
-
-      total_by_year <- metrics_burned %>%
-        dplyr::group_by(year, .drop = FALSE) %>%
-        dplyr::summarise(
-          total_area_ha = sum(area_ha, na.rm = TRUE),
-          .groups = "drop"
-        )
-
-      burned_yearly_metrics <- metrics_burned %>%
-        dplyr::arrange(series, year) %>%
-        dplyr::group_by(series, .drop = FALSE) %>%
-        dplyr::mutate(
-          area_ha = as.numeric(area_ha),
-          cumulative_area_ha = cumsum(area_ha),
-          series_total_ha = sum(area_ha, na.rm = TRUE),
-          share_within_series = dplyr::if_else(
-            series_total_ha > 0,
-            area_ha / series_total_ha,
-            NA_real_
-          ),
-          pct_change_prev_year = {
-            prev <- dplyr::lag(area_ha)
-            dplyr::if_else(
-              !is.na(prev) & prev != 0,
-              (area_ha - prev) / prev,
-              NA_real_
-            )
-          }
-        ) %>%
-        dplyr::ungroup() %>%
-        dplyr::select(-series_total_ha) %>%
-        dplyr::left_join(total_by_year, by = "year") %>%
-        dplyr::mutate(
-          share_of_year_total = dplyr::if_else(
-            total_area_ha > 0,
-            area_ha / total_area_ha,
-            NA_real_
-          )
-        )
-
-      total_combined_area <- sum(total_by_year$total_area_ha, na.rm = TRUE)
-
-      burned_overall_metrics <- burned_yearly_metrics %>%
+      coverage_stats <- df_long %>%
+        dplyr::filter(!is.na(area_ha)) %>%
         dplyr::group_by(series, .drop = FALSE) %>%
         dplyr::summarise(
-          years_covered = dplyr::n(),
-          year_min = min(year, na.rm = TRUE),
-          year_max = max(year, na.rm = TRUE),
-          area_total_ha = sum(area_ha, na.rm = TRUE),
-          area_mean_ha = mean(area_ha, na.rm = TRUE),
-          area_median_ha = stats::median(area_ha, na.rm = TRUE),
-          area_sd_ha = if (dplyr::n() > 1) stats::sd(area_ha, na.rm = TRUE) else NA_real_,
+          data = list(tibble::tibble(year = year, area_ha = area_ha)),
+          total_ha = sum(area_ha, na.rm = TRUE),
+          mean_ha = mean(area_ha, na.rm = TRUE),
           peak_idx = if_else(any(!is.na(area_ha)), which.max(area_ha), NA_integer_),
           low_idx  = if_else(any(!is.na(area_ha)), which.min(area_ha), NA_integer_),
-          data = list(tibble::tibble(year = year, area_ha = area_ha)),
           .groups = "drop_last"
         ) %>%
         dplyr::mutate(
           peak_year = purrr::map2_dbl(data, peak_idx, ~ if (is.na(.y)) NA_real_ else .x$year[.y]),
-          peak_area_ha = purrr::map2_dbl(data, peak_idx, ~ if (is.na(.y)) NA_real_ else .x$area_ha[.y]),
-          low_year = purrr::map2_dbl(data, low_idx, ~ if (is.na(.y)) NA_real_ else .x$year[.y]),
-          low_area_ha = purrr::map2_dbl(data, low_idx, ~ if (is.na(.y)) NA_real_ else .x$area_ha[.y]),
-          latest_year = purrr::map_dbl(data, ~ dplyr::last(.x$year)),
-          latest_area_ha = purrr::map_dbl(data, ~ dplyr::last(.x$area_ha)),
-          prev_area = purrr::map_dbl(
-            data,
-            ~ if (nrow(.x) > 1) dplyr::lag(.x$area_ha) %>% dplyr::last() else NA_real_
-          ),
-          pct_change_latest_vs_prev = dplyr::if_else(
-            !is.na(prev_area) & prev_area != 0,
-            (latest_area_ha - prev_area) / prev_area,
-            NA_real_
-          )
-        ) %>%
-        dplyr::select(-peak_idx, -low_idx, -data, -prev_area) %>%
-        dplyr::arrange(dplyr::desc(area_total_ha)) %>%
-        dplyr::ungroup() %>%
-        dplyr::mutate(
-          share_of_combined = if (is.finite(total_combined_area) && total_combined_area > 0) {
-            area_total_ha / total_combined_area
-          } else {
-            NA_real_
-          }
+          peak_area = purrr::map2_dbl(data, peak_idx, ~ if (is.na(.y)) NA_real_ else .x$area_ha[.y]),
+          low_year  = purrr::map2_dbl(data, low_idx,  ~ if (is.na(.y)) NA_real_ else .x$year[.y]),
+          low_area  = purrr::map2_dbl(data, low_idx,  ~ if (is.na(.y)) NA_real_ else .x$area_ha[.y])
         )
 
-      yearly_path <- file.path(metrics_dir, glue("{TERRITORY}_burned_yearly_metrics.csv"))
-      overall_path <- file.path(metrics_dir, glue("{TERRITORY}_burned_overall_metrics.csv"))
+      if (nrow(coverage_stats) == 0) {
+        message(glue("[metrics] No burned area data to summarise for {TERRITORY}"))
+      } else {
+        overview_table <- coverage_stats %>%
+          dplyr::mutate(
+            Couverture = coverage_label(series),
+            `Surface totale brûlée (ha)` = format_number_fr(total_ha),
+            `Moyenne annuelle (ha/an)` = format_number_fr(mean_ha),
+            `Année la plus forte / Part du total` = format_year_value_share(
+              peak_year, peak_area, share_fraction(peak_area, total_ha)
+            ),
+            `Année la plus faible / Part du total` = format_year_value_share(
+              low_year, low_area, share_fraction(low_area, total_ha)
+            )
+          ) %>%
+          dplyr::select(
+            Couverture,
+            `Surface totale brûlée (ha)`,
+            `Moyenne annuelle (ha/an)`,
+            `Année la plus forte / Part du total`,
+            `Année la plus faible / Part du total`
+          )
 
-      readr::write_csv(burned_yearly_metrics, yearly_path, na = "")
-      readr::write_csv(burned_overall_metrics, overall_path, na = "")
+        trends_table <- purrr::map_dfr(seq_len(nrow(coverage_stats)), function(idx) {
+          series_id <- coverage_stats$series[idx]
+          cov_label <- coverage_label(series_id)
+          data_tbl <- coverage_stats$data[[idx]]
+          total_ha <- coverage_stats$total_ha[idx]
+          cells <- compute_window_cells(data_tbl, BURN_WINDOWS, total_ha)
+          tibble::tibble(
+            Couverture = cov_label,
+            !!!rlang::set_names(cells, names(BURN_WINDOWS))
+          )
+        })
 
-      message(glue("[metrics] Saved burned area summaries to {basename(metrics_dir)} for {TERRITORY}"))
+        overview_stub <- glue(FILENAME_BURNED_OVERVIEW, territory = TERRITORY)
+        trends_stub <- glue(FILENAME_BURNED_TRENDS, territory = TERRITORY)
+        overview_path <- file.path(metrics_dir, glue("{overview_stub}.csv"))
+        trends_path <- file.path(metrics_dir, glue("{trends_stub}.csv"))
+
+        readr::write_csv(overview_table, overview_path, na = "")
+        readr::write_csv(trends_table, trends_path, na = "")
+
+        message(glue("[metrics] Saved burned area overview + trends tables to {basename(metrics_dir)} for {TERRITORY}"))
+      }
     }
 
     present_series <- levels(droplevels(df_long$series))  # "fo","nf"
