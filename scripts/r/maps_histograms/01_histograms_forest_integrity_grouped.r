@@ -70,7 +70,7 @@ label <- function(key, ..., macro = NULL) {
   glue::glue(template, .envir = rlang::env(...))
 }
 
-FILENAME_METRICS <- "08_{territory}_forest_integrity_grouped_metrics"
+FILENAME_METRICS <- "08_{territory}_forest_integrity_grouped_metrics.csv"
 
 format_number_fr <- function(x, digits = 0) {
   if (length(x) == 0) return(character(0))
@@ -309,23 +309,25 @@ for (LANG in LANGS) {
             "30" = LABELS$title_macro[["30"]][["fr"]],
             .default = NA_character_
           ),
-          part_macroclasse_pct = pct,
-          part_totale_pct = if (total_area > 0) 100 * area_ha / total_area else NA_real_
+          surface_ha = area_ha,
+          part_macroclasse = pct / 100,
+          part_totale = if (total_area > 0) area_ha / total_area else NA_real_
         ) %>%
         arrange(macroclass_num, dplyr::desc(score_value)) %>%
         transmute(
-          `Macroclasse (fr)` = macro_fr,
-          `Classe (fr)` = class_fr,
-          `Score agrégé` = score_value,
-          `Part dans la macroclasse (%)` = part_macroclasse_pct,
-          `Part du total (%)` = part_totale_pct
+          `Macroclasse` = macro_fr,
+          `Classe` = class_fr,
+          `Score` = format_number_fr(score_value),
+          `Surface (ha)` = format_number_fr(surface_ha),
+          `Part dans la macroclasse (%)` = format_percent_fr(part_macroclasse),
+          `Part du total (%)` = format_percent_fr(part_totale)
         )
 
       metrics_dir <- file.path("results", "metrics", TERRITORY, "derived")
       dir.create(metrics_dir, recursive = TRUE, showWarnings = FALSE)
       metrics_path <- file.path(
         metrics_dir,
-        glue("08_{TERRITORY}_forest_integrity_grouped_metrics.csv")
+        glue(FILENAME_METRICS, territory = TERRITORY)
       )
       readr::write_csv(metrics_tbl, metrics_path, na = "")
       message(
@@ -438,6 +440,13 @@ for (LANG in LANGS) {
     cat("\n", paste(rep("-", 64), collapse=""), "\n", sep = "")
   }
 }
+
+
+
+
+
+
+
 
 
 
