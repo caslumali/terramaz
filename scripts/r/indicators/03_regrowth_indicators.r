@@ -96,9 +96,9 @@ WINDOWS_11YR <- list(
 )
 
 FLOW_WINDOWS <- list(
-  `1990-2000 (moyenne / part)` = c(1990L, 2000L),
-  `2001-2011 (moyenne / part)` = c(2001L, 2011L),
-  `2012-2022 (moyenne / part)` = c(2012L, 2022L)
+  `1990-2000 (moyenne / part %)` = c(1990L, 2000L),
+  `2001-2011 (moyenne / part %)` = c(2001L, 2011L),
+  `2012-2022 (moyenne / part %)` = c(2012L, 2022L)
 )
 
 ## 1.2 Language & labels ----
@@ -163,10 +163,10 @@ theme_time_series <- function() {
     theme(
       plot.title.position = "plot",
       plot.title          = element_text(hjust = 0.5, face = "bold", size = 16, margin = margin(b = 10)),
-      axis.text.x         = element_text(size = 11, angle = 45, hjust = 1, vjust = 1, margin = margin(t = 6)),
-      axis.text.y         = element_text(size = 11),
-      axis.title.x        = element_text(size = 12, margin = margin(t = 12)),
-      axis.title.y        = element_text(size = 12, margin = margin(r = 12)),
+      axis.text.x         = element_text(size = 12, angle = 45, hjust = 1, vjust = 1, margin = margin(t = 6)),
+      axis.text.y         = element_text(size = 12),
+      axis.title.x        = element_text(size = 13, margin = margin(t = 12)),
+      axis.title.y        = element_text(size = 13, margin = margin(r = 12)),
       panel.grid.major.x  = element_blank(),
       panel.grid.minor    = element_blank(),
       panel.grid.major.y  = element_line(color = "#e6e6e6", linewidth = 0.3),
@@ -174,10 +174,10 @@ theme_time_series <- function() {
       legend.justification= "right",
       legend.direction    = "horizontal",
       legend.title        = element_blank(),
-      legend.text         = element_text(size = 12),
+      legend.text         = element_text(size = 13),
       legend.key.size     = unit(2.5, "lines"),
       plot.margin         = margin(12, 12, 12, 12),
-      plot.caption        = element_text(hjust = 1, size = 10, color = "gray30", margin = margin(t = 12))
+      plot.caption        = element_text(hjust = 1, size = 11, color = "gray30", margin = margin(t = 12))
     )
 }
 
@@ -186,10 +186,10 @@ theme_bar_series <- function() {
     theme(
       plot.title.position = "plot",
       plot.title          = element_text(hjust = 0.5, face = "bold", size = 16, margin = margin(b = 10)),
-      axis.text.x         = element_text(size = 11, angle = 45, hjust = 1, vjust = 1, margin = margin(t = 6)),
-      axis.text.y         = element_text(size = 11),
-      axis.title.x        = element_text(size = 12, margin = margin(t = 12)),
-      axis.title.y        = element_text(size = 12, margin = margin(r = 12)),
+      axis.text.x         = element_text(size = 12, angle = 45, hjust = 1, vjust = 1, margin = margin(t = 6)),
+      axis.text.y         = element_text(size = 12),
+      axis.title.x        = element_text(size = 13, margin = margin(t = 12)),
+      axis.title.y        = element_text(size = 13, margin = margin(r = 12)),
       panel.grid.major.x  = element_blank(),
       panel.grid.minor    = element_blank(),
       panel.grid.major.y  = element_line(color = "#e6e6e6", linewidth = 0.3),
@@ -197,11 +197,11 @@ theme_bar_series <- function() {
       legend.justification= "right",
       legend.direction    = "horizontal",
       legend.title        = element_blank(),
-      legend.text         = element_text(size = 12),
+      legend.text         = element_text(size = 13),
       legend.key.width    = unit(0.9, "cm"),
       legend.key.height   = unit(0.3, "cm"),
       plot.margin         = margin(12, 12, 12, 12),
-      plot.caption        = element_text(hjust = 1, size = 10, color = "gray30", margin = margin(t = 12))
+      plot.caption        = element_text(hjust = 1, size = 11, color = "gray30", margin = margin(t = 12))
     )
 }
 
@@ -210,10 +210,10 @@ theme_bar_age <- function() {
     theme(
       plot.title.position = "plot",
       plot.title          = element_text(hjust = 0.5, face = "bold", size = 16, margin = margin(b = 10)),
-      axis.text.x         = element_text(size = 11, margin = margin(t = 6)),
-      axis.text.y         = element_text(size = 11),
-      axis.title.x        = element_text(size = 12, margin = margin(t = 12)),
-      axis.title.y        = element_text(size = 12, margin = margin(r = 12)),
+      axis.text.x         = element_text(size = 12, margin = margin(t = 6)),
+      axis.text.y         = element_text(size = 12),
+      axis.title.x        = element_text(size = 13, margin = margin(t = 12)),
+      axis.title.y        = element_text(size = 13, margin = margin(r = 12)),
       panel.grid.major.x  = element_blank(),
       panel.grid.minor    = element_blank(),
       panel.grid.major.y  = element_line(color = "#e6e6e6", linewidth = 0.3),
@@ -221,11 +221,11 @@ theme_bar_age <- function() {
       legend.justification= "right",
       legend.direction    = "horizontal",
       legend.title        = element_blank(),
-      legend.text         = element_text(size = 12),
+      legend.text         = element_text(size = 13),
       legend.key.width    = unit(0.9, "cm"),
       legend.key.height   = unit(0.3, "cm"),
       plot.margin         = margin(12, 12, 12, 12),
-      plot.caption        = element_text(hjust = 1, size = 10, color = "gray30", margin = margin(t = 12))
+      plot.caption        = element_text(hjust = 1, size = 11, color = "gray30", margin = margin(t = 12))
     )
 }
 
@@ -885,7 +885,7 @@ for (LANG in LANGS) {
             "Surface actuelle de foret secondaire",
             "Variation absolue (ha)",
             "Variation relative (%)",
-            "Taux de croissance annuel compose (1990-2022)"
+            "Taux de croissance annuel composé - TCAC* (1990-2022)"
           ),
           Valeur = c(
             format_number_fr(initial_area),
@@ -909,7 +909,7 @@ for (LANG in LANGS) {
             !!!rlang::set_names(purrr::map(window_stats, "share"), names(WINDOWS_11YR))
           ),
           tibble::tibble(
-            Indicateur = "Taux de croissance annuel compose (%)",
+            Indicateur = "Taux de croissance annuel composé - TCAC* (%)",
             !!!rlang::set_names(purrr::map(window_stats, "cagr"), names(WINDOWS_11YR))
           )
         )

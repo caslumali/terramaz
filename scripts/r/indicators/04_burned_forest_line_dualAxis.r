@@ -220,11 +220,11 @@ theme_time_series <- function() {
       plot.title.position = "plot",
       plot.title          = element_text(hjust = 0.5, face = "bold", size = 16, margin = margin(b = 8)),
       plot.subtitle       = element_text(hjust = 0.5, face = "bold", size = 14, margin = margin(b = 6)),
-      axis.text.x         = element_text(size = 11, angle = 45, hjust = 1, vjust = 1, margin = margin(t = 6)),
-      axis.text.y         = element_text(size = 11),
-      axis.title.x        = element_text(size = 12, margin = margin(t = 12)),
-      axis.title.y        = element_text(size = 12, margin = margin(r = 12)),
-      axis.title.y.right  = element_text(size = 12, margin = margin(l = 12)),
+      axis.text.x         = element_text(size = 12, angle = 45, hjust = 1, vjust = 1, margin = margin(t = 6)),
+      axis.text.y         = element_text(size = 12),
+      axis.title.x        = element_text(size = 13, margin = margin(t = 12)),
+      axis.title.y        = element_text(size = 13, margin = margin(r = 12)),
+      axis.title.y.right  = element_text(size = 13, margin = margin(l = 12)),
       panel.grid.major.x  = element_blank(),
       panel.grid.minor    = element_blank(),
       panel.grid.major.y  = element_line(color = "#e6e6e6", linewidth = 0.3),
@@ -232,10 +232,10 @@ theme_time_series <- function() {
       legend.justification= "right",
       legend.direction    = "horizontal",
       legend.title        = element_blank(),
-      legend.text         = element_text(size = 12),
+      legend.text         = element_text(size = 13),
       legend.key.size     = unit(2.2, "lines"),
       plot.margin         = margin(10, 12, 6, 12),  # EN: slightly tighter; we’ll add extra gap via cowplot
-      plot.caption        = element_text(hjust = 1, size = 10, color = "gray30", margin = margin(t = 12))
+      plot.caption        = element_text(hjust = 1, size = 11, color = "gray30", margin = margin(t = 12))
     )
 }
 
