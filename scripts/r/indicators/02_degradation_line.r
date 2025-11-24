@@ -436,10 +436,10 @@ for (LANG in LANGS) {
       overview_table <- source_stats %>%
         transmute(
           Source = source_label,
-          `Surface totale degradee (ha)` = format_number_fr(total_ha),
-          `Degradation moyenne (ha/an)` = format_number_fr(mean_ha),
-          `Annee la plus forte / Part du total` = format_year_share_entry(peak_year, peak_value, peak_share),
-          `Annee la plus faible / Part du total` = format_year_share_entry(low_year, low_value, low_share)
+          `Surface totale dégradée (ha)` = format_number_fr(total_ha),
+          `Dégradation moyenne (ha/an)` = format_number_fr(mean_ha),
+          `Année la plus forte / Part du total` = format_year_share_entry(peak_year, peak_value, peak_share),
+          `Année la plus faible / Part du total` = format_year_share_entry(low_year, low_value, low_share)
         )
 
       trend_windows <- list(
