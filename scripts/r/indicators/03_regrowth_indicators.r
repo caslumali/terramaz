@@ -103,8 +103,8 @@ FLOW_WINDOWS <- list(
 
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
-# LANGS <- c("es")  # "pt" | "es" | "fr" | "en"
-LANGS <- c("fr", "es", "pt", "en")
+LANGS <- c("fr")  # "pt" | "es" | "fr" | "en"
+# LANGS <- c("fr", "es", "pt", "en")
 
 LABELS <- list(
   # Titles

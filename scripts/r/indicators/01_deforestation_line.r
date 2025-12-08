@@ -51,8 +51,8 @@ DPI              <- 300
 
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
-# LANGS <- c("fr")   # "pt" | "es" | "fr" | "en"
-LANGS        <- c("fr", "es", "pt", "en")
+LANGS <- c("fr")   # "pt" | "es" | "fr" | "en"
+# LANGS        <- c("fr", "es", "pt", "en")
 
 LABELS <- list(
   # Titles
@@ -250,6 +250,29 @@ theme_time_series <- function() {
       plot.caption        = element_text(hjust = 1, size = 11, color = "gray30", margin = margin(t = 12))
     )
 }
+
+# theme_time_series <- function() {
+#   theme_minimal(base_size = 13) +
+#     theme(
+#       plot.title.position = "plot",
+#       plot.title          = element_text(hjust = 0.5, face = "bold", size = 16, margin = margin(b = 10)),
+#       axis.text.x         = element_text(size = 13, angle = 45, hjust = 1, vjust = 1),
+#       axis.text.y         = element_text(size = 13),
+#       axis.title.x        = element_text(size = 14, margin = margin(t = 12)),
+#       axis.title.y        = element_text(size = 14, margin = margin(r = 12)),
+#       panel.grid.major.x  = element_blank(),
+#       panel.grid.minor    = element_blank(),
+#       panel.grid.major.y  = element_line(color = "#e6e6e6", linewidth = 0.3),
+#       legend.position     = "top",
+#       legend.justification= "right",
+#       legend.direction    = "horizontal",
+#       legend.title        = element_blank(),
+#       legend.text         = element_text(size = 14),
+#       legend.key.size     = unit(2.5, "lines"),
+#       plot.margin         = margin(12, 12, 12, 12),
+#       plot.caption        = element_text(hjust = 1, size = 11, color = "gray30", margin = margin(t = 12))
+#     )
+# }
 
 axis_x_years_all <- function(year_min, year_max) {
   scale_x_continuous(

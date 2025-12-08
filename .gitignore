@@ -15,6 +15,8 @@
 *.stan
 *.exe
 *.ico
+*.jpg
+*.jpeg
 
 # Shapefiles and related files
 *.csv

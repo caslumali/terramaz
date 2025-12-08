@@ -23,6 +23,7 @@ suppressPackageStartupMessages({
 # ------------------------------------------------------------------------- - - -
 WRITE_PLOT    <- TRUE
 WRITE_SVG     <- FALSE
+
 # TERRITORIES <- c("guaviare")  # quick test
 TERRITORIES   <- c("cotriguacu", "paragominas", "guaviare", "madre_de_dios")
 
@@ -38,14 +39,15 @@ FILENAME_DEF      <- "02_{territory}_degradation_{lang}"
 FILENAME_OVERVIEW <- "02_{territory}_degradation_overview"
 FILENAME_TRENDS   <- "02_{territory}_degradation_trends"
 FIG_WIDTH_MM      <- 431.8   # 17 in – full page width
-FIG_HEIGHT_MM     <- 152.4   # 6 in  – matches fire plots
+# FIG_HEIGHT_MM     <- 152.4   # 6 in  – matches fire plots
+FIG_HEIGHT_MM     <- 120.4   # 6 in  – matches fire plots
 UNITS             <- "mm"
 DPI               <- 300
 
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
-# LANGS <- c("fr")   # "pt" | "es" | "fr" | "en"
-LANGS        <- c("fr", "es", "pt", "en")
+LANGS <- c("fr")   # "pt" | "es" | "fr" | "en"
+# LANGS        <- c("fr", "es", "pt", "en")
 
 LABELS <- list(
   # Titles
@@ -227,6 +229,29 @@ theme_time_series <- function() {
     )
 }
 
+# theme_time_series <- function() {
+#   theme_minimal(base_size = 13) +
+#     theme(
+#       plot.title.position = "plot",
+#       plot.title          = element_text(hjust = 0.5, face = "bold", size = 16, margin = margin(b = 10)),
+#       axis.text.x         = element_text(size = 13, angle = 45, hjust = 1, vjust = 1),
+#       axis.text.y         = element_text(size = 13),
+#       axis.title.x        = element_text(size = 14, margin = margin(t = 12)),
+#       axis.title.y        = element_text(size = 14, margin = margin(r = 12)),
+#       panel.grid.major.x  = element_blank(),
+#       panel.grid.minor    = element_blank(),
+#       panel.grid.major.y  = element_line(color = "#e6e6e6", linewidth = 0.3),
+#       legend.position     = "top",
+#       legend.justification= "right",
+#       legend.direction    = "horizontal",
+#       legend.title        = element_blank(),
+#       legend.text         = element_text(size = 14),
+#       legend.key.size     = unit(2.5, "lines"),
+#       plot.margin         = margin(12, 12, 12, 12),
+#       plot.caption        = element_text(hjust = 1, size = 11, color = "gray30", margin = margin(t = 12))
+#     )
+# }
+
 axis_x_years_all <- function(year_min, year_max) {
   scale_x_continuous(
     breaks = seq(year_min, year_max, by = 1),
@@ -269,7 +294,7 @@ axis_y_ha_auto <- function(y_max_raw) {
   if (!is.finite(ymax) || ymax <= 0) ymax <- 10000
 
   # Clean steps: 5k, 10k, 20k, 50k, 100k, 200k, 500k, 1M…
-  steps <- c(5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000)
+  steps <- c(1000, 1500, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000)
   target_n <- 6
   step <- steps[ which.min(abs((ceiling(ymax/steps)+1) - target_n)) ]
   ymax <- ceiling(ymax/step)*step

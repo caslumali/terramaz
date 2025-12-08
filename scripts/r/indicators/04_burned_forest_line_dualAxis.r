@@ -44,6 +44,10 @@ FILENAME_BURNED_OVERVIEW  <- "04_{territory}_burned_overview"
 FILENAME_BURNED_TRENDS    <- "04_{territory}_burned_trends"
 FIG_WIDTH_MM  <- 431.8   # 17 in – full page width
 FIG_HEIGHT_MM <- 190
+
+# FIG_WIDTH_MM  <- 400     # A4 width
+# FIG_HEIGHT_MM <- 130
+
 UNITS         <- "mm"
 DPI           <- 300
 
@@ -62,8 +66,8 @@ BRAZIL_TERRITORIES <- c("cotriguacu", "paragominas")
 
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
-# LANGS <- c("fr")  # "pt" | "es" | "fr" | "en"
-LANGS <- c("fr", "es", "pt", "en")
+LANGS <- c("fr")  # "pt" | "es" | "fr" | "en"
+# LANGS <- c("fr", "es", "pt", "en")
 
 LABELS <- list(
   # Titles
@@ -239,6 +243,31 @@ theme_time_series <- function() {
     )
 }
 
+# theme_time_series <- function() {
+#   theme_minimal(base_size = 13) +
+#     theme(
+#       plot.title.position = "plot",
+#       plot.title          = element_text(hjust = 0.5, face = "bold", size = 16, margin = margin(b = 8)),
+#       plot.subtitle       = element_text(hjust = 0.5, face = "bold", size = 14, margin = margin(b = 6)),
+#       axis.text.x         = element_text(size = 13, angle = 45, hjust = 1, vjust = 1, margin = margin(t = 6)),
+#       axis.text.y         = element_text(size = 13),
+#       axis.title.x        = element_text(size = 14, margin = margin(t = 12)),
+#       axis.title.y        = element_text(size = 14, margin = margin(r = 12)),
+#       axis.title.y.right  = element_text(size = 14, margin = margin(l = 12)),
+#       panel.grid.major.x  = element_blank(),
+#       panel.grid.minor    = element_blank(),
+#       panel.grid.major.y  = element_line(color = "#e6e6e6", linewidth = 0.3),
+#       legend.position     = "top",
+#       legend.justification= "right",
+#       legend.direction    = "horizontal",
+#       legend.title        = element_blank(),
+#       legend.text         = element_text(size = 14),
+#       legend.key.size     = unit(2.2, "lines"),
+#       plot.margin         = margin(10, 12, 6, 12),  # EN: slightly tighter; we’ll add extra gap via cowplot
+#       plot.caption        = element_text(hjust = 1, size = 11, color = "gray30", margin = margin(t = 12))
+#     )
+# }
+
 axis_x_years_all <- function(year_min, year_max) {
   scale_x_continuous(
     breaks = seq(year_min, year_max, by = 1),
@@ -285,22 +314,22 @@ axis_x_years_all <- function(year_min, year_max) {
 # ------------------------------------------------------------------------- - - -
 # Priority: exact 'combined_fire_ha'. Otherwise, accept any '*fire|burn*_ha' or '*_area_ha'
 map_cols_to_fo_nf <- function(colnames) {
-  nms <- tolower(colnames)
-
-  # FO candidates
-  fo_idx <- which(stringr::str_detect(nms, "combined") &
-                  stringr::str_detect(nms, "fire") &
-                  stringr::str_detect(nms, "fo") &
-                  (stringr::str_detect(nms, "(_area_ha|_ha)$") | TRUE))
-  # NF candidates
-  nf_idx <- which(stringr::str_detect(nms, "combined") &
-                  stringr::str_detect(nms, "fire") &
-                  stringr::str_detect(nms, "nf") &
-                  (stringr::str_detect(nms, "(_area_ha|_ha)$") | TRUE))
-
-  fo_col <- if (length(fo_idx)) colnames[fo_idx[1]] else NA_character_
-  nf_col <- if (length(nf_idx)) colnames[nf_idx[1]] else NA_character_
-
+  # EN: Always prefer the *_ha columns from the combined fire series.
+  #     We know the CSV schema is stable, so we can hard-code them safely.
+  
+  fo_target <- "combined_fire_fo_ha"
+  nf_target <- "combined_fire_nf_ha"
+  
+  fo_col <- if (fo_target %in% colnames) fo_target else NA_character_
+  nf_col <- if (nf_target %in% colnames) nf_target else NA_character_
+  
+  # EN: Extra safety — scream if we did not find the expected columns
+  if (is.na(fo_col) || is.na(nf_col)) {
+    stop(glue::glue(
+      "Could not find 'combined_fire_fo_ha' or 'combined_fire_nf_ha' in columns: {paste(colnames, collapse = ', ')}"
+    ))
+  }
+  
   list(fo = fo_col, nf = nf_col)
 }
 
@@ -593,7 +622,7 @@ for (LANG in LANGS) {
     y_max <- max(c(df_fo$area_ha, df_nf$area_ha * k), na.rm = TRUE)
     if (!is.finite(y_max) || y_max <= 0) y_max <- 10000
 
-    steps <- c(5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000)
+    steps <- c(1000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000)
     target_n <- 6
     step <- steps[which.min(abs((ceiling(y_max/steps)+1) - target_n))]
     y_max <- ceiling(y_max/step) * step

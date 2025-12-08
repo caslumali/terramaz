@@ -36,7 +36,7 @@ TERRITORY_LABELS <- c(
 )
 
 UNITS         <- "mm"
-DPI           <- 300
+DPI           <- 450
 
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
@@ -47,7 +47,7 @@ LABELS <- list(
   # Axes
   x_score = c(fr = "Score", pt = "Score", es = "Score", en = "Score"),
   y_area_pct = c(
-    fr = "Pourcentage de la surface par classe",
+    fr = "Pourcentage de la surface\n par classe",
     es = "Porcentaje del área por clase",
     pt = "Porcentagem da área por classe",
     en = "Percentage of area per class"
@@ -154,8 +154,8 @@ score_colors <- c(
 theme_histogram_base <- function() {
 theme_minimal(base_size = 12) +
   theme(
-    axis.text.y        = element_text(size = 5),
-    axis.title.y       = element_text(size = 6, margin = margin(r = 4), color = "#6a6a6aff"),
+    axis.text.y        = element_text(size = 9),
+    axis.title.y       = element_text(size = 10, margin = margin(r = 4), color = "#6a6a6aff"),
     axis.text.x        = element_blank(),
     axis.ticks.x       = element_blank(),
     axis.title.x       = element_blank(),
@@ -390,12 +390,12 @@ for (LANG in LANGS) {
       axis_y_percent(show_labels = TRUE) +
       scale_x_discrete(expand = c(0, 0), drop = FALSE) +  # zero padding, keep all levels
       labs(y = label("y_area_pct"), x = NULL) +
-      theme_histogram_base() +
-      theme(
-        axis.text.x  = element_blank(),
-        axis.text.y  = element_text(size = if (TERRITORY == "cotriguacu") 7 else 5),
-        axis.title.y = element_text(size = if (TERRITORY == "cotriguacu") 9 else 6)
-      )
+      theme_histogram_base()
+      # theme(
+      #   axis.text.x  = element_blank(),
+      #   axis.text.y  = element_text(size = if (TERRITORY == "cotriguacu") 7 else 5),
+      #   axis.title.y = element_text(size = if (TERRITORY == "cotriguacu") 9 else 6)
+      # )
 
     print(p)
     message(glue("✓ Histogram generated for {TERRITORY}"))
