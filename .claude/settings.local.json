@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(dir /B /S \"C:\\dados\\SIG\\Cirad\\Terramaz\\results\\indicators\")"
-    ],
-    "deny": [],
-    "ask": []
-  }
-}
