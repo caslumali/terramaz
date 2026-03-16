@@ -62,4 +62,10 @@ report_blueprint.md
 /docs
 /results
 /qgis
+/report
 __pycache__
+**/olds/
+
+# Allow curated images for README
+!/images/
+!/images/*.png

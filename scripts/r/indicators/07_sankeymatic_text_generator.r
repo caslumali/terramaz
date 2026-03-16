@@ -18,8 +18,8 @@ suppressPackageStartupMessages({
 # Threshold to keep only globally relevant classes in the Sankey diagram
 MIN_SHARE <- 0.01
 
-LANGS        <- c("fr")
-# LANGS        <- c("fr", "es", "pt", "en")
+# LANGS        <- c("fr")
+LANGS        <- c("fr", "es", "pt", "en")
 
 OUT_DIR      <- "results/indicators"
 METRICS_DIR  <- "results/metrics"

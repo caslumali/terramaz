@@ -41,7 +41,7 @@ DPI           <- 450
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
 # LANGS <- c("fr", "es", "pt", "en")   # "pt" | "es" | "fr" | "en"
-LANGS <- c("fr")
+LANGS <- c("en")
 
 LABELS <- list(
   # Axes
@@ -50,7 +50,7 @@ LABELS <- list(
     fr = "Pourcentage de la surface\n par classe",
     es = "Porcentaje del área por clase",
     pt = "Porcentagem da área por classe",
-    en = "Percentage of area per class"
+    en = "Percentage of area\n per class"
   ),
   # Titles (per macroclass)
   title_macro = list(

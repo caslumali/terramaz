@@ -66,8 +66,8 @@ BRAZIL_TERRITORIES <- c("cotriguacu", "paragominas")
 
 ## 1.2 Language & labels ----
 # ------------------------------------------------------------------------- - - -
-LANGS <- c("fr")  # "pt" | "es" | "fr" | "en"
-# LANGS <- c("fr", "es", "pt", "en")
+# LANGS <- c("fr")  # "pt" | "es" | "fr" | "en"
+LANGS <- c("fr", "es", "pt", "en")
 
 LABELS <- list(
   # Titles
