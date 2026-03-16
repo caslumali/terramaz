@@ -133,7 +133,7 @@ Land-cover transitions are shown through two complementary visuals: a temporal c
 | Forest integrity composite index | Fire vulnerability |
 
 <p align="center">
-  <img src="images/map_paragominas_deforestation_risk.png" alt="Deforestation risk map for Paragominas" width="420">
+  <img src="images/map_paragominas_deforestation_risk.png" alt="Deforestation risk map for Paragominas" width="320">
 </p>
 
 <p align="center">
