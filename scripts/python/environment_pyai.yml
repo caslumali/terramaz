@@ -1,0 +1,72 @@
+name: pyai
+
+channels:
+  - conda-forge
+
+dependencies:
+
+  # ── Python ────────────────────────────────────────────────────────────────
+  - python=3.11                # Pinned for AI ecosystem stability
+
+  # ── PDF extraction ────────────────────────────────────────────────────────
+  - pymupdf                    # Fast text, image and metadata extraction from PDFs (fitz)
+  - pdfplumber                 # Precise table and structured text extraction from PDFs
+  - pypdf                      # PDF manipulation: merge, split, rotate, metadata
+  - pikepdf                    # Advanced PDF repair, decryption and recompression
+  - pdf2image                  # PDF page to image conversion (for scanned PDFs)
+  - pytesseract                # Python interface for Tesseract OCR
+  - tesseract                  # Tesseract OCR engine (system binary)
+  - pillow                     # Image manipulation (required by pytesseract)
+
+  # ── Office document extraction ────────────────────────────────────────────
+  - python-docx                # Read and write Word files (.docx)
+  - openpyxl                   # Read and write Excel files (.xlsx)
+  - python-pptx                # Read and write PowerPoint files (.pptx)
+  - beautifulsoup4             # HTML/XML content extraction
+  - lxml                       # Fast XML/HTML parser (required by beautifulsoup4)
+  - html2text                  # HTML to readable Markdown conversion
+  - markdown                   # Markdown file parsing and conversion
+
+  # ── Text processing ───────────────────────────────────────────────────────
+  - nltk                       # Natural language processing toolkit
+  - regex                      # Advanced regular expressions
+  - chardet                    # Automatic text encoding detection
+  - ftfy                       # Automatic broken encoding correction
+
+  # ── Embeddings and semantic search (RAG) ─────────────────────────────────
+  - sentence-transformers      # Sentence embeddings via transformer models
+  - chromadb                   # Lightweight local vector database for RAG
+  - tiktoken                   # OpenAI tokenizer (token estimation)
+
+  # ── Data and utilities ────────────────────────────────────────────────────
+  - pandas                     # Tabular data manipulation
+  - numpy                      # Numerical computing
+  - requests                   # HTTP requests and file downloads
+  - httpx                      # Modern async HTTP client
+  - python-dotenv              # Load environment variables from .env file
+  - pydantic                   # Data validation and structuring for LLM outputs
+  - tenacity                   # Retry logic for API calls
+  - tqdm                       # Progress bars for long tasks
+  - loguru                     # Modern readable logging
+  - rich                       # Rich terminal output (tables, colors)
+  - joblib                     # Parallelization and computation caching
+
+  # ── Serialization ─────────────────────────────────────────────────────────
+  - pyyaml                     # YAML file read/write
+  - jsonschema                 # JSON structure validation
+  - orjson                     # Ultra-fast JSON serialization
+
+  # ── Jupyter environment ───────────────────────────────────────────────────
+  - jupyterlab                 # Main notebook interface
+  - ipykernel                  # Python kernel for Jupyter
+  - nb_conda_kernels           # Exposes conda envs as Jupyter kernels
+  - ipywidgets                 # Interactive widgets in notebooks
+
+  # ── Visualization ─────────────────────────────────────────────────────────
+  - matplotlib                 # Base plotting library
+  - seaborn                    # Statistical data visualization
+
+  # ── Development tools ─────────────────────────────────────────────────────
+  - isort                      # Automatic import sorting
+  - black                      # Automatic code formatting
+  - ruff                       # Fast Python linter and style checker
