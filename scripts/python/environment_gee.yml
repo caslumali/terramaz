@@ -58,3 +58,11 @@ dependencies:
   - jupyter-dash   # Intégration de Dash dans les notebooks Jupyter
   - ipykernel      # Support pour l'exécution de différents noyaux dans Jupyter
   - nb_conda_kernels  # Permet d'afficher les environnements Conda dans Jupyter Notebook
+
+  # Ajout de Quarto pour la génération de documents et de rapports
+  - quarto         # Outil pour la création de rapports, documents scientifiques et présentations
+
+  # Outils de développement Python
+  - isort          # Organisation automatique des imports
+  - black          # Formatage automatique du code Python
+  - ruff           # Linting rapide et vérifications de style

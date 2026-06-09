@@ -16,7 +16,7 @@ dependencies:
   - seaborn        # Bibliothèque pour améliorer la visualisation de données
   - plotly         # Outils pour créer des graphiques interactifs
   - openpyxl       # Lecture et écriture de fichiers Excel au format .xlsx
-  
+
   # Bibliothèques pour la manipulation de données spatiales
   - geopandas      # Manipulation et analyse de données géospatiales au format vecteur
   - shapely        # Création et manipulation d'objets géométriques
@@ -57,4 +57,8 @@ dependencies:
 
   # Ajout de Quarto pour la génération de documents et de rapports
   - quarto         # Outil pour la création de rapports, documents scientifiques et présentations
-  
+
+  # Outils de développement Python
+  - isort          # Organisation automatique des imports
+  - black          # Formatage automatique du code Python
+  - ruff           # Linting rapide et vérifications de style
